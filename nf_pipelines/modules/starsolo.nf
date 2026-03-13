@@ -1,0 +1,118 @@
+/*
+ * STARsolo alignment for inDrop v3 libraries.
+ *
+ * Reads for each library are passed as comma-separated lists (one entry per run/source):
+ *   r1_files : gene reads  (R1 from Kotov runA, runB, Briggs)
+ *   r2_files : CB part 1  (R2, 8 bp)
+ *   r4_files : CB part 2 + UMI (R4, 14 bp: 8 bp CB2 + 6 bp UMI)
+ *
+ * CB/UMI positions (0-based mate indices, mate 0 = cDNA):
+ *   CB1 : mate 1 (R2), positions 0-7
+ *   CB2 : mate 2 (R4), positions 0-7
+ *   UMI : mate 2 (R4), positions 8-13
+ */
+process starsolo_v3 {
+    tag "STARsolo_v3 on ${lib_name}"
+    label "star"
+
+    memory params.star_mem
+    time params.star_time
+    cpus params.star_threads
+
+    publishDir "${params.output_dir}/${lib_name}", mode: 'copy'
+
+    input:
+        tuple val(lib_name), val(r1_files), val(r2_files), val(r4_files)
+        val genome_dir
+        val cb_whitelist1
+        val cb_whitelist2
+
+    output:
+        path "STAR/*"
+
+    script:
+    r1_str = r1_files instanceof List ? r1_files.join(',') : r1_files
+    r2_str = r2_files instanceof List ? r2_files.join(',') : r2_files
+    r4_str = r4_files instanceof List ? r4_files.join(',') : r4_files
+
+    """
+    mkdir -p STAR
+
+    STAR \
+        --runThreadN ${task.cpus} \
+        --genomeDir ${genome_dir} \
+        --readFilesIn ${r1_str} ${r2_str} ${r4_str} \
+        --readFilesCommand zcat \
+        --soloType CB_UMI_Complex \
+        --soloCBmatchWLtype EditDist_2 \
+        --soloCBwhitelist ${cb_whitelist1} ${cb_whitelist2} \
+        --soloCBposition 1_0_1_7 2_0_2_7 \
+        --soloUMIposition 2_8_2_13 \
+        --soloFeatures Gene GeneFull \
+        --soloUMIdedup 1MM_CR \
+        --soloUMIfiltering MultiGeneUMI_CR \
+        --outSAMtype BAM SortedByCoordinate \
+        --outSAMunmapped Within \
+        --outSAMattributes NH HI AS nM CR CY UR UY CB UB sM \
+        --soloMultiMappers EM \
+        --limitBAMsortRAM 30000000000 \
+        --outFileNamePrefix STAR/
+    """
+}
+
+
+/*
+ * STARsolo alignment for inDrop v2 libraries (Briggs only, no Kotov counterpart).
+ *
+ * Read structure:
+ *   reads[0] = R1: barcode read (CB1 variable | adapter | CB2 8 bp | UMI 6 bp)
+ *   reads[1] = R2: gene read
+ *
+ * Adapter GAGTGATTGCTTGTGACGCCTT is used to locate CB1 end.
+ */
+process starsolo_v2 {
+    tag "STARsolo_v2 on ${lib_name}"
+    label "star"
+
+    memory params.star_mem
+    time params.star_time
+    cpus params.star_threads
+
+    publishDir "${params.output_dir}/${lib_name}", mode: 'copy'
+
+    input:
+        tuple val(lib_name), path(r1), path(r2)
+        val genome_dir
+        val cb_whitelist1
+        val cb_whitelist2
+
+    output:
+        path "STAR/*"
+
+    script:
+    """
+    mkdir -p STAR
+
+    STAR \
+        --runThreadN ${task.cpus} \
+        --genomeDir ${genome_dir} \
+        --readFilesIn ${r1} ${r2} \
+        --readFilesCommand zcat \
+        --soloType CB_UMI_Complex \
+        --soloCBmatchWLtype EditDist_2 \
+        --soloCBwhitelist ${cb_whitelist1} ${cb_whitelist2} \
+        --soloAdapterSequence GAGTGATTGCTTGTGACGCCTT \
+        --soloAdapterMismatchesNmax 2 \
+        --soloCBposition 0_0_2_-1 3_1_3_8 \
+        --soloUMIposition 3_9_3_14 \
+        --soloFeatures Gene GeneFull \
+        --soloUMIdedup 1MM_CR \
+        --soloUMIfiltering MultiGeneUMI_CR \
+        --outSAMtype BAM SortedByCoordinate \
+        --outSAMunmapped Within \
+        --outSAMattributes NH HI AS nM CR CY UR UY CB UB sM \
+        --soloMultiMappers EM \
+        --limitBAMsortRAM 30000000000 \
+        --outFileNamePrefix STAR/
+    """
+}

@@ -1,0 +1,3 @@
+root : /mnt/beegfs/home/asalamit/persistent/
+genome_files_path = genomes/xenopus/star_index_v10
+fastq_files: scdata/fastq_files
