@@ -24,8 +24,8 @@ process starsolo_v3 {
     input:
         tuple val(lib_name), val(r1_files), val(r2_files), val(r4_files)
         val genome_dir
-        val cb_whitelist1
-        val cb_whitelist2
+        val cb_whitelist2_sense
+        val cb_whitelist2_rc
 
     output:
         path "STAR/*"
@@ -45,7 +45,7 @@ process starsolo_v3 {
         --readFilesCommand zcat \
         --soloType CB_UMI_Complex \
         --soloCBmatchWLtype EditDist_2 \
-        --soloCBwhitelist ${cb_whitelist1} ${cb_whitelist2} \
+        --soloCBwhitelist ${cb_whitelist2_sense} ${cb_whitelist2_rc} \
         --soloCBposition 1_0_1_7 2_0_2_7 \
         --soloUMIposition 2_8_2_13 \
         --soloFeatures Gene GeneFull \
@@ -83,8 +83,8 @@ process starsolo_v2 {
     input:
         tuple val(lib_name), path(r1), path(r2)
         val genome_dir
-        val cb_whitelist1
-        val cb_whitelist2
+        val cb_whitelist1_rc
+        val cb_whitelist2_sense
 
     output:
         path "STAR/*"
@@ -100,7 +100,7 @@ process starsolo_v2 {
         --readFilesCommand zcat \
         --soloType CB_UMI_Complex \
         --soloCBmatchWLtype EditDist_2 \
-        --soloCBwhitelist ${cb_whitelist1} ${cb_whitelist2} \
+        --soloCBwhitelist ${cb_whitelist1_rc} ${cb_whitelist2_sense} \
         --soloAdapterSequence GAGTGATTGCTTGTGACGCCTT \
         --soloAdapterMismatchesNmax 2 \
         --soloCBposition 0_0_2_-1 3_1_3_8 \

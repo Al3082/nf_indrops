@@ -106,8 +106,23 @@ workflow RUN_V3 {
             tuple('kotov_runB', runB[0], runB[1], runB[3])
         )
 
+        // ── 4. Load Briggs samplesheet, build file paths ──────────────────────
+
+        briggs_ch = Channel.fromPath(samplesheet)
+            .splitCsv(header: true)
+            .map { row ->
+                tuple(
+                    row.library_name,
+                    fastq("${row.briggs_srr}_1.fastq.gz"),
+                    fastq("${row.briggs_srr}_2.fastq.gz"),
+                    fastq("${row.briggs_srr}_4.fastq.gz")
+                )
+            }
+
         check_fastq(
-            kotov_check_ch,
+            kotov_check_ch.mix(
+                briggs_ch.first().map { lib, r1, r2, r4 -> tuple("briggs_${lib}", r1, r2, r4) }
+            ),
             file(params.cb_whitelist1),
             file(params.cb_whitelist2_sense),
             file(params.cb_whitelist2_rc)
@@ -158,28 +173,7 @@ workflow RUN_V3 {
         kotov_grouped = extracted
             .groupTuple(by: 0, size: 2)
 
-        // ── 4. Load Briggs samplesheet, build file paths ──────────────────────
-
-        briggs_ch = Channel.fromPath(samplesheet)
-            .splitCsv(header: true)
-            .map { row ->
-                tuple(
-                    row.library_name,
-                    fastq("${row.briggs_srr}_1.fastq.gz"),
-                    fastq("${row.briggs_srr}_2.fastq.gz"),
-                    fastq("${row.briggs_srr}_4.fastq.gz")
-                )
-            }
-
-        // Pre-flight check on first Briggs library
-        check_fastq(
-            briggs_ch.first().map { lib, r1, r2, r4 -> tuple("briggs_${lib}", r1, r2, r4) },
-            file(params.cb_whitelist1),
-            file(params.cb_whitelist2_sense),
-            file(params.cb_whitelist2_rc)
-        )
-
-        // ── 5. Join Kotov (grouped) + Briggs per library ──────────────────────
+        // ── 4. Join Kotov (grouped) + Briggs per library ──────────────────────
 
         starsolo_in = kotov_grouped
             .join(briggs_ch, by: 0)
@@ -191,12 +185,12 @@ workflow RUN_V3 {
                 tuple(lib_name, all_r1, all_r2, all_r4)
             }
 
-        // ── 6. STARsolo alignment ─────────────────────────────────────────────
+        // ── 5. STARsolo alignment ─────────────────────────────────────────────
 
         starsolo_v3(
             starsolo_in,
             params.genome_dir,
-            params.cb_whitelist1,
+            params.cb_whitelist2_sense,
             params.cb_whitelist2_rc
         )
 }
@@ -223,8 +217,8 @@ workflow RUN_V2 {
         starsolo_v2(
             briggs_v2,
             params.genome_dir,
-            params.cb_whitelist1,
-            params.cb_whitelist1
+            params.cb_whitelist1_rc,
+            params.cb_whitelist2_sense
         )
 }
 
@@ -237,11 +231,11 @@ workflow {
     if (!params.fastq_dir)  error "Please specify --fastq_dir"
     if (!params.output_dir) error "Please specify --output_dir"
     if (!params.genome_dir) error "Please specify --genome_dir"
-    if (!params.cb_whitelist1) {
-        error "Please specify --cb_whitelist1 (CB1 whitelist)"
+    if (params.batch == 'v2' && (!params.cb_whitelist1_rc || !params.cb_whitelist2_sense)) {
+        error "Please specify --cb_whitelist1_rc and --cb_whitelist2_sense (v2 whitelists)"
     }
-    if (params.batch != 'v2' && (!params.cb_whitelist2_sense || !params.cb_whitelist2_rc)) {
-        error "Please specify --cb_whitelist2_sense and --cb_whitelist2_rc (v3 CB2 whitelists)"
+    if (params.batch != 'v2' && (!params.cb_whitelist1 || !params.cb_whitelist2_sense || !params.cb_whitelist2_rc)) {
+        error "Please specify --cb_whitelist1, --cb_whitelist2_sense and --cb_whitelist2_rc (v3 whitelists)"
     }
 
     if (params.batch == 'v3_s8_14') {

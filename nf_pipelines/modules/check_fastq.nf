@@ -69,11 +69,11 @@ process check_fastq {
     zcat ${r2} | awk 'NR%4==2' | head -100000 > _r2_sample.txt
     n_r2=\$(wc -l < _r2_sample.txt)
     n_cb1=\$(grep -cFxf ${cb_whitelist1} _r2_sample.txt || true)
-    pct_cb1=\$(awk "BEGIN{printf \"%.1f\", (\$n_r2>0) ? 100*\$n_cb1/\$n_r2 : 0}")
+    pct_cb1=\$(awk -v nr="\$n_r2" -v nc="\$n_cb1" 'BEGIN{printf "%.1f", (nr>0) ? 100*nc/nr : 0}')
     echo "  Sampled : \$n_r2"
     echo "  Matches : \$n_cb1"
     echo "  Rate    : \${pct_cb1}%"
-    awk "BEGIN{if (\$pct_cb1+0 < 5) print \"  WARNING: <5% match — R2 may not contain CB1 barcodes (wrong file or orientation?)\"}"
+    awk -v p="\$pct_cb1" 'BEGIN{if (p+0 < 5) print "  WARNING: <5% match — R2 may not contain CB1 barcodes (wrong file or orientation?)"}'
     echo ""
 
     echo "--- CB2 match check (R4 first 8 bp vs whitelist2 — both orientations) ---"
@@ -81,16 +81,16 @@ process check_fastq {
     n_r4=\$(wc -l < _r4_cb2_sample.txt)
 
     n_cb2_sense=\$(grep -cFxf ${cb_whitelist2_sense} _r4_cb2_sample.txt || true)
-    pct_cb2_sense=\$(awk "BEGIN{printf \"%.1f\", (\$n_r4>0) ? 100*\$n_cb2_sense/\$n_r4 : 0}")
+    pct_cb2_sense=\$(awk -v nr="\$n_r4" -v nc="\$n_cb2_sense" 'BEGIN{printf "%.1f", (nr>0) ? 100*nc/nr : 0}')
 
     n_cb2_rc=\$(grep -cFxf ${cb_whitelist2_rc} _r4_cb2_sample.txt || true)
-    pct_cb2_rc=\$(awk "BEGIN{printf \"%.1f\", (\$n_r4>0) ? 100*\$n_cb2_rc/\$n_r4 : 0}")
+    pct_cb2_rc=\$(awk -v nr="\$n_r4" -v nc="\$n_cb2_rc" 'BEGIN{printf "%.1f", (nr>0) ? 100*nc/nr : 0}')
 
     echo "  Sampled          : \$n_r4"
     echo "  Sense matches    : \$n_cb2_sense  (\${pct_cb2_sense}%)"
     echo "  RC matches       : \$n_cb2_rc  (\${pct_cb2_rc}%)"
-    awk "BEGIN{if (\$pct_cb2_sense+0 >= \$pct_cb2_rc+0) print \"  Best orientation : sense\"; else print \"  Best orientation : RC\"}"
-    awk "BEGIN{if (\$pct_cb2_sense+0 < 5 && \$pct_cb2_rc+0 < 5) print \"  WARNING: <5% match for both orientations — wrong file or incorrect whitelist?\"}"
+    awk -v s="\$pct_cb2_sense" -v r="\$pct_cb2_rc" 'BEGIN{if (s+0 >= r+0) print "  Best orientation : sense"; else print "  Best orientation : RC"}'
+    awk -v s="\$pct_cb2_sense" -v r="\$pct_cb2_rc" 'BEGIN{if (s+0 < 5 && r+0 < 5) print "  WARNING: <5% match for both orientations — wrong file or incorrect whitelist?"}'
 
     } > ${label}.preflight.txt
 
