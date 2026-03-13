@@ -42,12 +42,12 @@ process starsolo_v3 {
         --runThreadN ${task.cpus} \
         --genomeDir ${genome_dir} \
         --readFilesIn ${r1_str} ${r2_str} ${r4_str} \
-        --readFilesCommand zcat \
+        --readFilesCommand pigz \
         --soloType CB_UMI_Complex \
         --soloCBmatchWLtype EditDist_2 \
         --soloCBwhitelist ${cb_whitelist2_sense} ${cb_whitelist2_rc} \
-        --soloCBposition 1_0_1_7 2_0_2_7 \
-        --soloUMIposition 2_8_2_13 \
+        --soloCBposition 2_0_2_7 3_0_3_7 \
+        --soloUMIposition 3_8_3_13 \
         --soloFeatures Gene GeneFull \
         --soloUMIdedup 1MM_CR \
         --soloUMIfiltering MultiGeneUMI_CR \
