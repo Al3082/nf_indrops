@@ -42,7 +42,7 @@ process starsolo_v3 {
         --runThreadN ${task.cpus} \
         --genomeDir ${genome_dir} \
         --readFilesIn ${r1_str} ${r2_str} ${r4_str} \
-        --readFilesCommand pigz \
+        --readFilesCommand zcat \
         --soloType CB_UMI_Complex \
         --soloCBmatchWLtype EditDist_2 \
         --soloCBwhitelist ${cb_whitelist2_sense} ${cb_whitelist2_rc} \
