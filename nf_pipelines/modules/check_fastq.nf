@@ -76,6 +76,17 @@ process check_fastq {
     awk -v p="\$pct_cb1" 'BEGIN{if (p+0 < 5) print "  WARNING: <5% match — R2 may not contain CB1 barcodes (wrong file or orientation?)"}'
     echo ""
 
+    echo "--- CB1 match check (R2 exact sequence vs whitelist2) ---"
+    zcat ${r2} | awk 'NR%4==2' | head -100000 > _r2_sample.txt
+    n_r2=\$(wc -l < _r2_sample.txt)
+    n_cb1=\$(grep -cFxf ${path cb_whitelist2_sense} _r2_sample.txt || true)
+    pct_cb1=\$(awk -v nr="\$n_r2" -v nc="\$n_cb1" 'BEGIN{printf "%.1f", (nr>0) ? 100*nc/nr : 0}')
+    echo "  Sampled : \$n_r2"
+    echo "  Matches : \$n_cb1"
+    echo "  Rate    : \${pct_cb1}%"
+    awk -v p="\$pct_cb1" 'BEGIN{if (p+0 < 5) print "  WARNING: <5% match — R2 may not contain CB1 barcodes (wrong file or orientation?)"}'
+    echo ""
+
     echo "--- CB2 match check (R4 first 8 bp vs whitelist2 — both orientations) ---"
     zcat ${r4} | awk 'NR%4==2{print substr(\$0,1,8)}' | head -100000 > _r4_cb2_sample.txt
     n_r4=\$(wc -l < _r4_cb2_sample.txt)
