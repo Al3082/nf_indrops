@@ -46,7 +46,7 @@ process starsolo_v3 {
         --soloType CB_UMI_Complex \
         --soloCBmatchWLtype EditDist_2 \
         --soloCBwhitelist ${cb_whitelist2_sense} ${cb_whitelist2_rc} \
-        --soloCBposition 0_0_2_7 0_8_0_15 \
+        --soloCBposition 0_0_0_7 0_8_0_15 \
         --soloUMIposition 0_16_0_21 \
         --soloFeatures Gene GeneFull \
         --soloUMIdedup 1MM_CR \
