@@ -57,7 +57,7 @@ process starsolo_v3 {
         --soloCBwhitelist ${cb_whitelist2_sense} ${cb_whitelist2_rc} \
         --soloCBposition 0_0_0_7 0_8_0_15 \
         --soloUMIposition 0_16_0_21 \
-        --soloFeatures Gene GeneFull \
+        --soloFeatures Gene GeneFull Velocyto \
         --soloUMIdedup 1MM_CR \
         --soloUMIfiltering MultiGeneUMI_CR \
         --outSAMtype BAM SortedByCoordinate \
