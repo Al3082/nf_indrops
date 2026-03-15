@@ -1,15 +1,20 @@
 /*
  * STARsolo alignment for inDrop v3 libraries.
  *
- * Reads for each library are passed as comma-separated lists (one entry per run/source):
+ * Reads for each library are passed as lists (one entry per run/source):
  *   r1_files : gene reads  (R1 from Kotov runA, runB, Briggs)
  *   r2_files : CB part 1  (R2, 8 bp)
  *   r4_files : CB part 2 + UMI (R4, 14 bp: 8 bp CB2 + 6 bp UMI)
  *
- * CB/UMI positions (0-based mate indices, mate 0 = cDNA):
- *   CB1 : mate 1 (R2), positions 0-7
- *   CB2 : mate 2 (R4), positions 0-7
- *   UMI : mate 2 (R4), positions 8-13
+ * R2 and R4 are merged into a single 22 bp barcode read before alignment:
+ *   positions 0-7  : CB1 (from R2)
+ *   positions 8-15 : CB2 (first 8 bp of R4)
+ *   positions 16-21: UMI (last 6 bp of R4)
+ *
+ * STARsolo position notation (anchor_pos_anchor_pos, anchor 0 = read start):
+ *   CB1 : 0_0_0_7
+ *   CB2 : 0_8_0_15
+ *   UMI : 0_16_0_21
  */
 process starsolo_v3 {
     tag "STARsolo_v3 on ${lib_name}"
@@ -32,16 +37,20 @@ process starsolo_v3 {
 
     script:
     r1_str = r1_files instanceof List ? r1_files.join(',') : r1_files
-    r2_str = r2_files instanceof List ? r2_files.join(',') : r2_files
-    r4_str = r4_files instanceof List ? r4_files.join(',') : r4_files
+    r2_str = r2_files instanceof List ? r2_files.join(' ') : r2_files
+    r4_str = r4_files instanceof List ? r4_files.join(' ') : r4_files
 
     """
     mkdir -p STAR
 
+    paste <(zcat ${r2_str}) <(zcat ${r4_str}) \
+        | awk 'NR%4==1{print \$1} NR%4==2{print \$1\$2} NR%4==3{print "+"} NR%4==0{print \$1\$2}' \
+        | gzip -c > bc_merged.fastq.gz
+
     STAR \
         --runThreadN ${task.cpus} \
         --genomeDir ${genome_dir} \
-        --readFilesIn ${r1_str} ${r2_str} ${r4_str} \
+        --readFilesIn ${r1_str} bc_merged.fastq.gz \
         --readFilesCommand zcat \
         --soloType CB_UMI_Complex \
         --soloCBmatchWLtype EditDist_2 \

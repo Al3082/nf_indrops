@@ -79,6 +79,7 @@ params.kotov_s16_22_runB_r4 = "SRR18313247.fastq.gz"
 include { demux_libraries; extract_reads } from './modules/demux.nf'
 include { starsolo_v3; starsolo_v2       } from './modules/starsolo.nf'
 include { check_fastq                    } from './modules/check_fastq.nf'
+include { fastqc; multiqc                } from './modules/qc.nf'
 
 
 // ── Helper: resolve fastq path ────────────────────────────────────────────────
@@ -185,7 +186,13 @@ workflow RUN_V3 {
                 tuple(lib_name, all_r1, all_r2, all_r4)
             }
 
-        // ── 5. STARsolo alignment ─────────────────────────────────────────────
+        // ── 5. FastQC on per-library reads ────────────────────────────────────
+
+        fastqc(starsolo_in)
+
+        multiqc(fastqc.out.reports.collect())
+
+        // ── 6. STARsolo alignment ─────────────────────────────────────────────
 
         starsolo_v3(
             starsolo_in,
