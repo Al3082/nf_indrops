@@ -12,7 +12,7 @@ process fastqc {
     publishDir "${params.output_dir}/qc/fastqc", mode: 'copy'
 
     input:
-        tuple val(lib_name), val(r1_files), val(r2_files), val(r4_files)
+        tuple val(lib_name), path(r1_files), path(r2_files), path(r4_files)
 
     output:
         path "*.{html,zip}", emit: reports
