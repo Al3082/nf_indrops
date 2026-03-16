@@ -36,21 +36,26 @@ process starsolo_v3 {
         path "STAR/*"
 
     script:
-    r1_str = r1_files instanceof List ? r1_files.join(',') : r1_files
-    r2_str = r2_files instanceof List ? r2_files.join(' ') : r2_files
-    r4_str = r4_files instanceof List ? r4_files.join(' ') : r4_files
+    r1_list = r1_files instanceof List ? r1_files : [r1_files]
+    r2_list = r2_files instanceof List ? r2_files : [r2_files]
+    r4_list = r4_files instanceof List ? r4_files : [r4_files]
+
+    merge_cmds = [r2_list, r4_list].transpose().withIndex().collect { pair, i ->
+        "paste <(zcat ${pair[0]}) <(zcat ${pair[1]}) | awk 'NR%4==1{print \$1} NR%4==2{print \$1\$2} NR%4==3{print \"+\"} NR%4==0{print \$1\$2}' | gzip -c > bc_${i}.fastq.gz"
+    }.join('\n')
+
+    r1_str = r1_list.join(',')
+    bc_str = (0..<r2_list.size()).collect { "bc_${it}.fastq.gz" }.join(',')
 
     """
     mkdir -p STAR
 
-    paste <(zcat ${r2_str}) <(zcat ${r4_str}) \
-        | awk 'NR%4==1{print \$1} NR%4==2{print \$1\$2} NR%4==3{print "+"} NR%4==0{print \$1\$2}' \
-        | gzip -c > bc_merged.fastq.gz
+    ${merge_cmds}
 
     STAR \
         --runThreadN ${task.cpus} \
         --genomeDir ${genome_dir} \
-        --readFilesIn ${r1_str} bc_merged.fastq.gz \
+        --readFilesIn ${r1_str} ${bc_str} \
         --readFilesCommand zcat \
         --soloType CB_UMI_Complex \
         --soloCBmatchWLtype EditDist_2 \
