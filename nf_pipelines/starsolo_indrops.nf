@@ -181,7 +181,7 @@ workflow RUN_V3 {
         kotov_trim_in = extracted.map { lib, run_id, r1, r2, r4 ->
             tuple("${lib}__${run_id}", r1)
         }
-        trimmed_kotov = trim_kotov_r1(kotov_trim_in, adapter_fa)
+        trimmed_kotov = trim_kotov_r1(kotov_trim_in, adapter_fa).trimmed
 
         extracted_trimmed = extracted
             .map { lib, run_id, r1, r2, r4 -> tuple("${lib}__${run_id}", lib, run_id, r2, r4) }
@@ -196,7 +196,7 @@ workflow RUN_V3 {
         // ── 3c. Trim Briggs R1 (gene reads) ──────────────────────────────────
 
         briggs_trim_in = briggs_ch.map { lib, r1, r2, r4 -> tuple(lib, r1) }
-        trimmed_briggs = trim_briggs_r1(briggs_trim_in, adapter_fa)
+        trimmed_briggs = trim_briggs_r1(briggs_trim_in, adapter_fa).trimmed
 
         briggs_trimmed = briggs_ch
             .map { lib, r1, r2, r4 -> tuple(lib, r2, r4) }
