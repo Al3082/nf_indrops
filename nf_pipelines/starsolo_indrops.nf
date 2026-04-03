@@ -45,6 +45,9 @@ params.cb_whitelist1       = null  // required: CB1 whitelist (gel_barcode1_list
 params.cb_whitelist2_sense = null  // required: CB2 forward whitelist (gel_barcode2_list.txt) – v3
 params.cb_whitelist2_rc    = null  // required: CB2 reverse-complement whitelist (bc2_rc.txt) – v3
 
+// Adapter fasta for gene-read trimming (cutadapt)
+params.adapter_fasta = null  // required: e.g. illumina_nextseq_p7.fasta
+
 // Samplesheets  (defaults point to bundled files)
 params.samplesheet = null   // overrides default per-batch samplesheet
 
@@ -76,10 +79,12 @@ params.kotov_s16_22_runB_r4 = "SRR18313247.fastq.gz"
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 
-include { demux_libraries; extract_reads } from './modules/demux.nf'
-include { starsolo_v3; starsolo_v2       } from './modules/starsolo.nf'
-include { check_fastq                    } from './modules/check_fastq.nf'
-include { fastqc; multiqc                } from './modules/qc.nf'
+include { demux_libraries; extract_reads                 } from './modules/demux.nf'
+include { starsolo_v3; starsolo_v2                       } from './modules/starsolo.nf'
+include { trim_gene_read as trim_kotov_r1                } from './modules/trim.nf'
+include { trim_gene_read as trim_briggs_r1               } from './modules/trim.nf'
+include { check_fastq                                    } from './modules/check_fastq.nf'
+include { fastqc; multiqc                                } from './modules/qc.nf'
 
 
 // ── Helper: resolve fastq path ────────────────────────────────────────────────
@@ -169,15 +174,39 @@ workflow RUN_V3 {
 
         extracted = extract_reads(extract_in)
 
+        // ── 3b. Trim Kotov R1 (gene reads) ───────────────────────────────────
+
+        adapter_fa = file(params.adapter_fasta, checkIfExists: true)
+
+        kotov_trim_in = extracted.map { lib, run_id, r1, r2, r4 ->
+            tuple("${lib}__${run_id}", r1)
+        }
+        trimmed_kotov = trim_kotov_r1(kotov_trim_in, adapter_fa)
+
+        extracted_trimmed = extracted
+            .map { lib, run_id, r1, r2, r4 -> tuple("${lib}__${run_id}", lib, run_id, r2, r4) }
+            .join(trimmed_kotov)
+            .map { key, lib, run_id, r2, r4, tr1 -> tuple(lib, run_id, tr1, r2, r4) }
+
         // Group both runs per library
         // -> (lib_name, [run_ids], [r1s], [r2s], [r4s])
-        kotov_grouped = extracted
+        kotov_grouped = extracted_trimmed
             .groupTuple(by: 0, size: 2)
+
+        // ── 3c. Trim Briggs R1 (gene reads) ──────────────────────────────────
+
+        briggs_trim_in = briggs_ch.map { lib, r1, r2, r4 -> tuple(lib, r1) }
+        trimmed_briggs = trim_briggs_r1(briggs_trim_in, adapter_fa)
+
+        briggs_trimmed = briggs_ch
+            .map { lib, r1, r2, r4 -> tuple(lib, r2, r4) }
+            .join(trimmed_briggs)
+            .map { lib, r2, r4, tr1 -> tuple(lib, tr1, r2, r4) }
 
         // ── 4. Join Kotov (grouped) + Briggs per library ──────────────────────
 
         starsolo_in = kotov_grouped
-            .join(briggs_ch, by: 0)
+            .join(briggs_trimmed, by: 0)
             .map { lib_name, run_ids, kotov_r1s, kotov_r2s, kotov_r4s,
                    briggs_r1, briggs_r2, briggs_r4 ->
                 all_r1 = (kotov_r1s + [briggs_r1]).collect { it.toString() }
@@ -238,6 +267,9 @@ workflow {
     if (!params.fastq_dir)  error "Please specify --fastq_dir"
     if (!params.output_dir) error "Please specify --output_dir"
     if (!params.genome_dir) error "Please specify --genome_dir"
+    if (params.batch != 'v2' && !params.adapter_fasta) {
+        error "Please specify --adapter_fasta (e.g. illumina_nextseq_p7.fasta) for gene-read trimming"
+    }
     if (params.batch == 'v2' && (!params.cb_whitelist1_rc || !params.cb_whitelist2_sense)) {
         error "Please specify --cb_whitelist1_rc and --cb_whitelist2_sense (v2 whitelists)"
     }
