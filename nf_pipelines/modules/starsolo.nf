@@ -70,6 +70,9 @@ process starsolo_v3 {
         --outSAMattributes NH HI AS nM CR CY UR UY CB UB sM \
         --soloMultiMappers EM \
         --outFileNamePrefix STAR/ \
+        --clipAdapterType CellRanger4 \
+        --outFilterScoreMinOverLread 0.3 \
+        --outFilterMatchNminOverLread 0.3 \
         --soloOutFormatFeaturesGeneField3 gene_name
     """
 }
