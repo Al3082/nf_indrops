@@ -11,7 +11,7 @@ process trim_gene_read {
         path adapter_fasta
 
     output:
-        tuple val(sample_id), path("trimmed_R1.fastq.gz")
+        tuple val(sample_id), path("${sample_id}.trimmed_R1.fastq.gz")
 
     script:
     """
@@ -21,7 +21,7 @@ process trim_gene_read {
         --poly-a \
         -m 20 \
         -j ${task.cpus} \
-        -o trimmed_R1.fastq.gz \
+        -o ${sample_id}.trimmed_R1.fastq.gz \
         ${r1}
     """
 }
