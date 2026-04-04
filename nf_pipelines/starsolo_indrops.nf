@@ -48,6 +48,10 @@ params.cb_whitelist2_rc    = null  // required: CB2 reverse-complement whitelist
 // Adapter fasta for gene-read trimming (cutadapt)
 params.adapter_fasta = null  // required: e.g. illumina_nextseq_p7.fasta
 
+// Optional QC steps
+params.skip_preflight = false  // --skip_preflight to skip pre-flight FASTQ checks
+params.skip_qc        = false  // --skip_qc to skip FastQC/MultiQC
+
 // Samplesheets  (defaults point to bundled files)
 params.samplesheet = null   // overrides default per-batch samplesheet
 
@@ -125,14 +129,16 @@ workflow RUN_V3 {
                 )
             }
 
-        check_fastq(
-            kotov_check_ch.mix(
-                briggs_ch.first().map { lib, r1, r2, r4 -> tuple("briggs_${lib}", r1, r2, r4) }
-            ),
-            file(params.cb_whitelist1),
-            file(params.cb_whitelist2_sense),
-            file(params.cb_whitelist2_rc)
-        )
+        if (!params.skip_preflight) {
+            check_fastq(
+                kotov_check_ch.mix(
+                    briggs_ch.first().map { lib, r1, r2, r4 -> tuple("briggs_${lib}", r1, r2, r4) }
+                ),
+                file(params.cb_whitelist1),
+                file(params.cb_whitelist2_sense),
+                file(params.cb_whitelist2_rc)
+            )
+        }
 
         // ── 1. Cutadapt demultiplexing of Kotov R3 reads ──────────────────────
         //    Input:  (run_id, r3_fastq)
@@ -232,9 +238,10 @@ workflow RUN_V3 {
 
         // ── 5. FastQC on per-library reads ────────────────────────────────────
 
-        fastqc(starsolo_in)
-
-        multiqc(fastqc.out.reports.collect())
+        if (!params.skip_qc) {
+            fastqc(starsolo_in)
+            multiqc(fastqc.out.reports.collect())
+        }
 
         // ── 6. STARsolo alignment ─────────────────────────────────────────────
 
