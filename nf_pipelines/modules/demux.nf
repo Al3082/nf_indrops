@@ -58,9 +58,39 @@ process extract_reads {
 
     script:
     """
-    seqtk comp ${demuxed_r3} | cut -f1 > ids.txt
+    seqtk comp ${demuxed_r3} | cut -f1 | sort > ids.txt
     seqtk subseq ${r1} ids.txt | gzip -c > ${lib_name}.${run_id}.R1.fastq.gz
     seqtk subseq ${r2} ids.txt | gzip -c > ${lib_name}.${run_id}.R2.fastq.gz
     seqtk subseq ${r4} ids.txt | gzip -c > ${lib_name}.${run_id}.R4.fastq.gz
+    """
+}
+
+
+/*
+ * Re-sync barcode reads (R2, R4) with a trimmed R1 that may have had reads
+ * discarded by cutadapt -m. Extracts read IDs from trimmed R1 and filters
+ * R2/R4 to only those IDs using seqtk subseq.
+ */
+process sync_reads {
+    tag "sync ${sample_id}"
+    label "seqtk"
+
+    memory params.seqtk_mem
+    time params.seqtk_time
+    cpus 1
+
+    input:
+        tuple val(sample_id), path(trimmed_r1), path(r2), path(r4)
+
+    output:
+        tuple val(sample_id), \
+              path("${sample_id}.synced_R2.fastq.gz"), \
+              path("${sample_id}.synced_R4.fastq.gz")
+
+    script:
+    """
+    seqtk comp ${trimmed_r1} | cut -f1 | sort > ids.txt
+    seqtk subseq ${r2} ids.txt | gzip -c > ${sample_id}.synced_R2.fastq.gz
+    seqtk subseq ${r4} ids.txt | gzip -c > ${sample_id}.synced_R4.fastq.gz
     """
 }

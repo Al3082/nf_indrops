@@ -79,7 +79,7 @@ params.kotov_s16_22_runB_r4 = "SRR18313247.fastq.gz"
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 
-include { demux_libraries; extract_reads                 } from './modules/demux.nf'
+include { demux_libraries; extract_reads; sync_reads as sync_kotov; sync_reads as sync_briggs } from './modules/demux.nf'
 include { starsolo_v3; starsolo_v2                       } from './modules/starsolo.nf'
 include { trim_gene_read as trim_kotov_r1                } from './modules/trim.nf'
 include { trim_gene_read as trim_briggs_r1               } from './modules/trim.nf'
@@ -175,6 +175,8 @@ workflow RUN_V3 {
         extracted = extract_reads(extract_in)
 
         // ── 3b. Trim Kotov R1 (gene reads) ───────────────────────────────────
+        //    cutadapt -m 20 discards short reads, breaking sync with R2/R4.
+        //    sync_kotov re-filters R2/R4 to match surviving R1 read IDs.
 
         adapter_fa = file(params.adapter_fasta, checkIfExists: true)
 
@@ -183,14 +185,22 @@ workflow RUN_V3 {
         }
         trimmed_kotov = trim_kotov_r1(kotov_trim_in, adapter_fa).trimmed
 
-        extracted_trimmed = extracted
+        // Join trimmed R1 back with original R2/R4, then re-sync
+        kotov_sync_in = extracted
             .map { lib, run_id, r1, r2, r4 -> tuple("${lib}__${run_id}", lib, run_id, r2, r4) }
             .join(trimmed_kotov)
-            .map { key, lib, run_id, r2, r4, tr1 -> tuple(lib, run_id, tr1, r2, r4) }
+            .map { key, lib, run_id, r2, r4, tr1 -> tuple("${lib}__${run_id}", tr1, r2, r4) }
+
+        kotov_synced = trimmed_kotov
+            .join(sync_kotov(kotov_sync_in))
+            .map { key, tr1, r2, r4 ->
+                def (lib, run_id) = key.split('__')
+                tuple(lib, run_id, tr1, r2, r4)
+            }
 
         // Group both runs per library
         // -> (lib_name, [run_ids], [r1s], [r2s], [r4s])
-        kotov_grouped = extracted_trimmed
+        kotov_grouped = kotov_synced
             .groupTuple(by: 0, size: 2)
 
         // ── 3c. Trim Briggs R1 (gene reads) ──────────────────────────────────
@@ -198,10 +208,15 @@ workflow RUN_V3 {
         briggs_trim_in = briggs_ch.map { lib, r1, r2, r4 -> tuple(lib, r1) }
         trimmed_briggs = trim_briggs_r1(briggs_trim_in, adapter_fa).trimmed
 
-        briggs_trimmed = briggs_ch
+        // Re-sync Briggs R2/R4 with trimmed R1
+        briggs_sync_in = briggs_ch
             .map { lib, r1, r2, r4 -> tuple(lib, r2, r4) }
             .join(trimmed_briggs)
             .map { lib, r2, r4, tr1 -> tuple(lib, tr1, r2, r4) }
+
+        briggs_trimmed = trimmed_briggs
+            .join(sync_briggs(briggs_sync_in))
+            .map { lib, tr1, r2, r4 -> tuple(lib, tr1, r2, r4) }
 
         // ── 4. Join Kotov (grouped) + Briggs per library ──────────────────────
 
