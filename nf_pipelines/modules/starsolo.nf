@@ -76,6 +76,70 @@ process starsolo_v3 {
 
 
 /*
+ * STARsolo alignment for inDrop v3 libraries — 1MM barcode matching variant.
+ *
+ * Same as starsolo_v3 but uses --soloCBmatchWLtype 1MM instead of EditDist_2.
+ */
+process starsolo_v3_1mm {
+    tag "STARsolo_v3_1mm on ${lib_name}"
+    label "star"
+
+    memory params.star_mem
+    time params.star_time
+    cpus params.star_threads
+
+    publishDir "${params.output_dir}/${lib_name}/starsolo_1mm", mode: 'copy'
+
+    input:
+        tuple val(lib_name), val(r1_files), val(r2_files), val(r4_files)
+        val genome_dir
+        val cb_whitelist2_sense
+        val cb_whitelist2_rc
+
+    output:
+        path "STAR/*"
+
+    script:
+    r1_list = r1_files instanceof List ? r1_files : [r1_files]
+    r2_list = r2_files instanceof List ? r2_files : [r2_files]
+    r4_list = r4_files instanceof List ? r4_files : [r4_files]
+
+    merge_cmds = [r2_list, r4_list].transpose().withIndex().collect { pair, i ->
+        "paste <(zcat ${pair[0]}) <(zcat ${pair[1]}) | awk 'NR%4==1{print \$1} NR%4==2{print \$1\$2} NR%4==3{print \"+\"} NR%4==0{print \$1\$2}' | gzip -c > bc_${i}.fastq.gz"
+    }.join('\n')
+
+    r1_str = r1_list.join(',')
+    bc_str = (0..<r2_list.size()).collect { "bc_${it}.fastq.gz" }.join(',')
+
+    """
+    mkdir -p STAR
+
+    ${merge_cmds}
+
+    STAR \
+        --runThreadN ${task.cpus} \
+        --genomeDir ${genome_dir} \
+        --readFilesIn ${r1_str} ${bc_str} \
+        --readFilesCommand zcat \
+        --soloType CB_UMI_Complex \
+        --soloCBmatchWLtype 1MM \
+        --soloCBwhitelist ${cb_whitelist2_sense} ${cb_whitelist2_rc} \
+        --soloCBposition 0_0_0_7 0_8_0_15 \
+        --soloUMIposition 0_16_0_21 \
+        --soloFeatures Gene GeneFull Velocyto \
+        --soloUMIdedup 1MM_CR \
+        --soloUMIfiltering MultiGeneUMI_CR \
+        --outSAMtype BAM SortedByCoordinate \
+        --outSAMunmapped Within \
+        --outSAMattributes NH HI AS nM CR CY UR UY CB UB sM \
+        --soloMultiMappers EM \
+        --outFileNamePrefix STAR/ \
+        --soloOutFormatFeaturesGeneField3 gene_name
+    """
+}
+
+
+/*
  * STARsolo alignment for inDrop v2 libraries (Briggs only, no Kotov counterpart).
  *
  * Read structure:

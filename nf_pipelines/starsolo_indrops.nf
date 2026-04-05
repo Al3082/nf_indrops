@@ -52,6 +52,10 @@ params.adapter_fasta = null  // required: e.g. illumina_nextseq_p7.fasta
 params.skip_preflight = false  // --skip_preflight to skip pre-flight FASTQ checks
 params.skip_qc        = false  // --skip_qc to skip FastQC/MultiQC
 
+// Test mode: run starsolo + starsolo_1mm + dropest in parallel on a single library
+params.test           = false  // --test to enable test mode
+params.test_library   = 'S11_1_1'  // library to test on
+
 // Samplesheets  (defaults point to bundled files)
 params.samplesheet = null   // overrides default per-batch samplesheet
 
@@ -84,7 +88,10 @@ params.kotov_s16_22_runB_r4 = "SRR18313247.fastq.gz"
 // ── Imports ───────────────────────────────────────────────────────────────────
 
 include { demux_libraries; extract_reads; sync_reads as sync_kotov; sync_reads as sync_briggs } from './modules/demux.nf'
-include { starsolo_v3; starsolo_v2                       } from './modules/starsolo.nf'
+include { starsolo_v3; starsolo_v3_1mm; starsolo_v2      } from './modules/starsolo.nf'
+include { droptag_v3; star_plain as star_plain_v3; dropest_quant as dropest_v3 } from './modules/dropest.nf'
+include { droptag_v2; star_plain as star_plain_v2; dropest_quant as dropest_v2 } from './modules/dropest.nf'
+include { droptag_v3 as droptag_v3_test; star_plain as star_plain_test; dropest_quant as dropest_test } from './modules/dropest.nf'
 include { trim_gene_read as trim_kotov_r1                } from './modules/trim.nf'
 include { trim_gene_read as trim_briggs_r1               } from './modules/trim.nf'
 include { check_fastq                                    } from './modules/check_fastq.nf'
@@ -243,14 +250,55 @@ workflow RUN_V3 {
             multiqc(fastqc.out.reports.collect())
         }
 
-        // ── 6. STARsolo alignment ─────────────────────────────────────────────
+        // ── 6. Alignment & quantification ────────────────────────────────────
 
-        starsolo_v3(
-            starsolo_in,
-            params.genome_dir,
-            params.cb_whitelist2_sense,
-            params.cb_whitelist2_rc
-        )
+        if (params.test) {
+            // Test mode: run all three aligners on a single library
+            test_ch = starsolo_in.filter { lib_name, r1, r2, r4 ->
+                lib_name == params.test_library
+            }
+
+            // 1) STARsolo EditDist_2 (current default)
+            starsolo_v3(
+                test_ch,
+                params.genome_dir,
+                params.cb_whitelist2_sense,
+                params.cb_whitelist2_rc
+            )
+
+            // 2) STARsolo 1MM
+            starsolo_v3_1mm(
+                test_ch,
+                params.genome_dir,
+                params.cb_whitelist2_sense,
+                params.cb_whitelist2_rc
+            )
+
+            // 3) dropEst
+            droptag_xml = file(params.droptag_v3_xml, checkIfExists: true)
+            dropest_xml = file(params.dropest_xml, checkIfExists: true)
+            gtf_file    = file(params.gtf, checkIfExists: true)
+
+            tagged  = droptag_v3_test(test_ch, droptag_xml)
+            aligned = star_plain_test(tagged, params.genome_dir)
+            dropest_test(aligned, gtf_file, dropest_xml)
+
+        } else if (params.aligner == 'starsolo') {
+            starsolo_v3(
+                starsolo_in,
+                params.genome_dir,
+                params.cb_whitelist2_sense,
+                params.cb_whitelist2_rc
+            )
+        } else if (params.aligner == 'dropest') {
+            droptag_xml = file(params.droptag_v3_xml, checkIfExists: true)
+            dropest_xml = file(params.dropest_xml, checkIfExists: true)
+            gtf_file    = file(params.gtf, checkIfExists: true)
+
+            tagged  = droptag_v3(starsolo_in, droptag_xml)
+            aligned = star_plain_v3(tagged, params.genome_dir)
+            dropest_v3(aligned, gtf_file, dropest_xml)
+        }
 }
 
 
@@ -272,12 +320,22 @@ workflow RUN_V2 {
                 )
             }
 
-        starsolo_v2(
-            briggs_v2,
-            params.genome_dir,
-            params.cb_whitelist1_rc,
-            params.cb_whitelist2_sense
-        )
+        if (params.aligner == 'starsolo') {
+            starsolo_v2(
+                briggs_v2,
+                params.genome_dir,
+                params.cb_whitelist1_rc,
+                params.cb_whitelist2_sense
+            )
+        } else if (params.aligner == 'dropest') {
+            droptag_xml = file(params.droptag_v2_xml, checkIfExists: true)
+            dropest_xml = file(params.dropest_xml, checkIfExists: true)
+            gtf_file    = file(params.gtf, checkIfExists: true)
+
+            tagged  = droptag_v2(briggs_v2, droptag_xml)
+            aligned = star_plain_v2(tagged, params.genome_dir)
+            dropest_v2(aligned, gtf_file, dropest_xml)
+        }
 }
 
 
@@ -289,6 +347,14 @@ workflow {
     if (!params.fastq_dir)  error "Please specify --fastq_dir"
     if (!params.output_dir) error "Please specify --output_dir"
     if (!params.genome_dir) error "Please specify --genome_dir"
+    if (params.aligner != 'starsolo' && params.aligner != 'dropest') {
+        error "Unknown --aligner '${params.aligner}'. Use: starsolo | dropest"
+    }
+    if (params.aligner == 'dropest' || params.test) {
+        if (!params.dropest_container) error "Please specify --dropest_container when using --aligner dropest or --test"
+        if (!params.gtf) error "Please specify --gtf (GTF annotation) when using --aligner dropest or --test"
+        if (!params.dropest_xml) error "Please specify --dropest_xml (dropEst config XML) when using --aligner dropest or --test"
+    }
     if (params.batch != 'v2' && !params.adapter_fasta) {
         error "Please specify --adapter_fasta (e.g. illumina_nextseq_p7.fasta) for gene-read trimming"
     }
