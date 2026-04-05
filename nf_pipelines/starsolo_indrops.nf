@@ -276,12 +276,11 @@ workflow RUN_V3 {
 
             // 3) dropEst
             droptag_xml = file(params.droptag_v3_xml, checkIfExists: true)
-            dropest_xml = file(params.dropest_xml, checkIfExists: true)
             gtf_file    = file(params.gtf, checkIfExists: true)
 
             tagged  = droptag_v3_test(test_ch, droptag_xml)
             aligned = star_plain_test(tagged, params.genome_dir)
-            dropest_test(aligned, gtf_file, dropest_xml)
+            dropest_test(aligned, gtf_file, droptag_xml)
 
         } else if (params.aligner == 'starsolo') {
             starsolo_v3(
@@ -292,12 +291,11 @@ workflow RUN_V3 {
             )
         } else if (params.aligner == 'dropest') {
             droptag_xml = file(params.droptag_v3_xml, checkIfExists: true)
-            dropest_xml = file(params.dropest_xml, checkIfExists: true)
             gtf_file    = file(params.gtf, checkIfExists: true)
 
             tagged  = droptag_v3(starsolo_in, droptag_xml)
             aligned = star_plain_v3(tagged, params.genome_dir)
-            dropest_v3(aligned, gtf_file, dropest_xml)
+            dropest_v3(aligned, gtf_file, droptag_xml)
         }
 }
 
@@ -329,12 +327,11 @@ workflow RUN_V2 {
             )
         } else if (params.aligner == 'dropest') {
             droptag_xml = file(params.droptag_v2_xml, checkIfExists: true)
-            dropest_xml = file(params.dropest_xml, checkIfExists: true)
             gtf_file    = file(params.gtf, checkIfExists: true)
 
             tagged  = droptag_v2(briggs_v2, droptag_xml)
             aligned = star_plain_v2(tagged, params.genome_dir)
-            dropest_v2(aligned, gtf_file, dropest_xml)
+            dropest_v2(aligned, gtf_file, droptag_xml)
         }
 }
 
@@ -353,7 +350,6 @@ workflow {
     if (params.aligner == 'dropest' || params.test) {
         if (!params.dropest_container) error "Please specify --dropest_container when using --aligner dropest or --test"
         if (!params.gtf) error "Please specify --gtf (GTF annotation) when using --aligner dropest or --test"
-        if (!params.dropest_xml) error "Please specify --dropest_xml (dropEst config XML) when using --aligner dropest or --test"
     }
     if (params.batch != 'v2' && !params.adapter_fasta) {
         error "Please specify --adapter_fasta (e.g. illumina_nextseq_p7.fasta) for gene-read trimming"

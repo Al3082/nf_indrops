@@ -155,7 +155,7 @@ process dropest_quant {
     input:
         tuple val(lib_name), path(bam), path(params_file)
         path gtf
-        path dropest_xml
+        path droptag_xml
 
     output:
         path "*"
@@ -167,7 +167,7 @@ process dropest_quant {
         -w -V -m \
         -L eiEIBA \
         -g ${gtf} \
-        -c ${dropest_xml} \
+        -c ${droptag_xml} \
         ${bam}
     """
 }
