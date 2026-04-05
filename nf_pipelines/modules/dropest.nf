@@ -27,7 +27,7 @@ process droptag_v3 {
         path droptag_xml
 
     output:
-        tuple val(lib_name), path("*.tagged.*.fastq.gz"), path("*.params.gz"), emit: tagged
+        tuple val(lib_name), path("${lib_name}.*.fastq.gz"), path("*.params.gz"), emit: tagged
 
     script:
     r1_list = r1_files instanceof List ? r1_files : [r1_files]
@@ -73,7 +73,7 @@ process droptag_v2 {
         path droptag_xml
 
     output:
-        tuple val(lib_name), path("*.tagged.*.fastq.gz"), path("*.params.gz"), emit: tagged
+        tuple val(lib_name), path("${lib_name}.*.fastq.gz"), path("*.params.gz"), emit: tagged
 
     script:
     """
@@ -81,6 +81,7 @@ process droptag_v2 {
         -c ${droptag_xml} \
         -S -s \
         -p ${task.cpus} \
+        -n ${lib_name} \
         ${r1} ${r2}
     """
 }
