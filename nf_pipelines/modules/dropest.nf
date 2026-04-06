@@ -17,11 +17,6 @@
 process droptag_v3 {
     tag "dropTag_v3 on ${lib_name}"
     label "dropest"
-    stageInMode 'copy'
-
-    memory params.dropest_mem
-    time params.dropest_time
-    cpus params.dropest_threads
 
     input:
         tuple val(lib_name), val(r1_files), val(r2_files), val(r4_files)
@@ -65,10 +60,6 @@ process droptag_v3_premerged {
     tag "dropTag_v3 on ${lib_name}"
     label "dropest"
 
-    memory params.dropest_mem
-    time params.dropest_time
-    cpus params.dropest_threads
-
     input:
         tuple val(lib_name), path(r1), path(r2), path(r4)
         val droptag_xml
@@ -98,11 +89,6 @@ process droptag_v3_premerged {
 process droptag_v2 {
     tag "dropTag_v2 on ${lib_name}"
     label "dropest"
-    stageInMode 'copy'
-
-    memory params.dropest_mem
-    time params.dropest_time
-    cpus params.dropest_threads
 
     input:
         tuple val(lib_name), path(r1), path(r2)
@@ -133,10 +119,6 @@ process star_plain {
     tag "STAR on ${lib_name}"
     label "star"
 
-    memory params.star_mem
-    time params.star_time
-    cpus params.star_threads
-
     input:
         tuple val(lib_name), path(tagged_reads), path(params_file)
         val genome_dir
@@ -154,7 +136,6 @@ process star_plain {
         --genomeDir ${genome_dir} \
         --readFilesIn ${reads_str} \
         --readFilesCommand zcat \
-        --outFilterMultimapNmax 10 \
         --outFilterScoreMinOverLread 0.66 \
         --outFilterMatchNminOverLread 0.66 \
         --outFilterMismatchNmax 999 \
@@ -182,9 +163,6 @@ process star_plain {
 process dropest_quant {
     tag "dropEst on ${lib_name}"
     label "dropest"
-
-    memory params.dropest_mem
-    time params.dropest_time
     cpus 1
 
     publishDir "${params.output_dir}/${lib_name}/dropest", mode: 'copy'

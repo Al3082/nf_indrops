@@ -19,9 +19,12 @@ process trim_gene_read {
     output:
         tuple val(sample_id), path("${sample_id}.trimmed_R1.fastq.gz"), emit: trimmed
         path "${sample_id}.cutadapt_trim_stats.txt",                    emit: stats
+        path "${sample_id}.trim_counts.tsv",                            emit: counts
 
     script:
     """
+    input_n=\$(zcat ${r1} | awk 'END{print NR/4}')
+
     cutadapt \
         -a file:${adapter_fasta} \
         --nextseq-trim=20 \
@@ -31,5 +34,10 @@ process trim_gene_read {
         -o ${sample_id}.trimmed_R1.fastq.gz \
         ${r1} \
         > ${sample_id}.cutadapt_trim_stats.txt
+
+    output_n=\$(zcat ${sample_id}.trimmed_R1.fastq.gz | awk 'END{print NR/4}')
+    echo -e "sample\\tstep\\treads" > ${sample_id}.trim_counts.tsv
+    echo -e "${sample_id}\\tbefore_trim\\t\${input_n}" >> ${sample_id}.trim_counts.tsv
+    echo -e "${sample_id}\\tafter_trim\\t\${output_n}" >> ${sample_id}.trim_counts.tsv
     """
 }

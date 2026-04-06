@@ -88,13 +88,15 @@ params.kotov_s16_22_runB_r4 = "SRR18313247.fastq.gz"
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 
-include { demux_libraries; extract_reads; sync_reads as sync_kotov; sync_reads as sync_briggs } from './modules/demux.nf'
+include { demux_libraries; extract_reads; sync_reads as sync_kotov; sync_reads as sync_briggs; sync_single_read as sync_v2_barcode } from './modules/demux.nf'
+include { consolidate_stats                              } from './modules/stats.nf'
 include { starsolo_v3; starsolo_v3_1mm; starsolo_v2      } from './modules/starsolo.nf'
 include { droptag_v3; star_plain as star_plain_v3; dropest_quant as dropest_v3 } from './modules/dropest.nf'
 include { droptag_v2; star_plain as star_plain_v2; dropest_quant as dropest_v2 } from './modules/dropest.nf'
 include { droptag_v3 as droptag_v3_test; droptag_v3_premerged as droptag_v3_premerged_test; star_plain as star_plain_test; dropest_quant as dropest_test } from './modules/dropest.nf'
 include { trim_gene_read as trim_kotov_r1                } from './modules/trim.nf'
 include { trim_gene_read as trim_briggs_r1               } from './modules/trim.nf'
+include { trim_gene_read as trim_v2_gene                 } from './modules/trim.nf'
 include { check_fastq                                    } from './modules/check_fastq.nf'
 include { fastqc; multiqc                                } from './modules/qc.nf'
 
@@ -186,7 +188,8 @@ workflow RUN_V3 {
         // ── 3. Seqtk: extract R1/R2/R4 reads matching demuxed IDs ────────────
         //    Output: (lib_name, run_id, r1_out, r2_out, r4_out)
 
-        extracted = extract_reads(extract_in)
+        extract_out = extract_reads(extract_in)
+        extracted = extract_out.reads
 
         // ── 3b. Trim Kotov R1 (gene reads) ───────────────────────────────────
         //    cutadapt -m 20 discards short reads, breaking sync with R2/R4.
@@ -205,8 +208,9 @@ workflow RUN_V3 {
             .join(trimmed_kotov)
             .map { key, lib, run_id, r2, r4, tr1 -> tuple("${lib}__${run_id}", tr1, r2, r4) }
 
+        kotov_sync_out = sync_kotov(kotov_sync_in)
         kotov_synced = trimmed_kotov
-            .join(sync_kotov(kotov_sync_in))
+            .join(kotov_sync_out.reads)
             .map { key, tr1, r2, r4 ->
                 def (lib, run_id) = key.split('__')
                 tuple(lib, run_id, tr1, r2, r4)
@@ -215,7 +219,7 @@ workflow RUN_V3 {
         // Group both runs per library
         // -> (lib_name, [run_ids], [r1s], [r2s], [r4s])
         kotov_grouped = kotov_synced
-            .groupTuple(by: 0, size: 2)
+            .groupTuple(by: 0)
 
         // ── 3c. Trim Briggs R1 (gene reads) ──────────────────────────────────
 
@@ -228,9 +232,23 @@ workflow RUN_V3 {
             .join(trimmed_briggs)
             .map { lib, r2, r4, tr1 -> tuple(lib, tr1, r2, r4) }
 
+        briggs_sync_out = sync_briggs(briggs_sync_in)
         briggs_trimmed = trimmed_briggs
-            .join(sync_briggs(briggs_sync_in))
+            .join(briggs_sync_out.reads)
             .map { lib, tr1, r2, r4 -> tuple(lib, tr1, r2, r4) }
+
+        // ── 3d. Consolidate read statistics ──────────────────────────────────
+
+        consolidate_stats(
+            params.batch,
+            demux_out.counts
+                .mix(extract_out.stats)
+                .mix(trim_kotov_r1.out.counts)
+                .mix(trim_briggs_r1.out.counts)
+                .mix(kotov_sync_out.stats)
+                .mix(briggs_sync_out.stats)
+                .collect()
+        )
 
         // ── 4. Join Kotov (grouped) + Briggs per library ──────────────────────
 
@@ -322,7 +340,7 @@ workflow RUN_V2 {
 
     main:
 
-        briggs_v2 = Channel.fromPath(samplesheet)
+        briggs_v2_raw = Channel.fromPath(samplesheet)
             .splitCsv(header: true)
             .map { row ->
                 tuple(
@@ -331,6 +349,38 @@ workflow RUN_V2 {
                     fastq("${row.srr}_2.fastq.gz")
                 )
             }
+
+        // ── Trim gene reads (R2) and re-sync barcode reads (R1) ─────────
+
+        adapter_fa = file(params.adapter_fasta, checkIfExists: true)
+
+        // Trim R2 (gene read): adapters, poly-A, low-quality bases
+        v2_trim_in = briggs_v2_raw.map { lib, r1, r2 -> tuple(lib, r2) }
+        trimmed_v2 = trim_v2_gene(v2_trim_in, adapter_fa).trimmed
+
+        // Sync R1 (barcode read) with surviving trimmed R2 read IDs
+        v2_sync_in = briggs_v2_raw
+            .map { lib, r1, r2 -> tuple(lib, r1) }
+            .join(trimmed_v2)
+            .map { lib, r1, tr2 -> tuple(lib, tr2, r1) }
+
+        synced_v2 = sync_v2_barcode(v2_sync_in)
+
+        // Reassemble (lib, r1_barcode, r2_gene) with trimmed/synced reads
+        briggs_v2 = synced_v2.reads
+            .join(trimmed_v2)
+            .map { lib, sr1, tr2 -> tuple(lib, sr1, tr2) }
+
+        // ── Consolidate read statistics ──────────────────────────────────
+
+        consolidate_stats(
+            params.batch,
+            trim_v2_gene.out.counts
+                .mix(synced_v2.stats)
+                .collect()
+        )
+
+        // ── Alignment ────────────────────────────────────────────────────
 
         if (params.aligner == 'starsolo') {
             starsolo_v2(
@@ -365,7 +415,7 @@ workflow {
         if (!params.dropest_container) error "Please specify --dropest_container when using --aligner dropest or --test"
         if (!params.gtf) error "Please specify --gtf (GTF annotation) when using --aligner dropest or --test"
     }
-    if (params.batch != 'v2' && !params.adapter_fasta) {
+    if (!params.adapter_fasta) {
         error "Please specify --adapter_fasta (e.g. illumina_nextseq_p7.fasta) for gene-read trimming"
     }
     if (params.batch == 'v2' && (!params.cb_whitelist1_rc || !params.cb_whitelist2_sense)) {

@@ -15,6 +15,7 @@
  */
 process check_fastq {
     tag "preflight ${label}"
+    label "preflight"
 
     publishDir "${params.output_dir}/preflight", mode: 'copy'
 

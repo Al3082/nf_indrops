@@ -20,10 +20,6 @@ process starsolo_v3 {
     tag "STARsolo_v3 on ${lib_name}"
     label "star"
 
-    memory params.star_mem
-    time params.star_time
-    cpus params.star_threads
-
     publishDir "${params.output_dir}/${lib_name}", mode: 'copy'
 
     input:
@@ -69,6 +65,7 @@ process starsolo_v3 {
         --outSAMunmapped Within \
         --outSAMattributes NH HI AS nM CR CY UR UY CB UB sM \
         --soloMultiMappers EM \
+        --limitBAMsortRAM 30000000000 \
         --outFileNamePrefix STAR/ \
         --soloOutFormatFeaturesGeneField3 gene_name
     """
@@ -83,10 +80,6 @@ process starsolo_v3 {
 process starsolo_v3_1mm {
     tag "STARsolo_v3_1mm on ${lib_name}"
     label "star"
-
-    memory params.star_mem
-    time params.star_time
-    cpus params.star_threads
 
     publishDir "${params.output_dir}/${lib_name}/starsolo_1mm", mode: 'copy'
 
@@ -133,6 +126,7 @@ process starsolo_v3_1mm {
         --outSAMunmapped Within \
         --outSAMattributes NH HI AS nM CR CY UR UY CB UB sM \
         --soloMultiMappers EM \
+        --limitBAMsortRAM 30000000000 \
         --outFileNamePrefix STAR/ \
         --soloOutFormatFeaturesGeneField3 gene_name
     """
@@ -152,10 +146,6 @@ process starsolo_v2 {
     tag "STARsolo_v2 on ${lib_name}"
     label "star"
 
-    memory params.star_mem
-    time params.star_time
-    cpus params.star_threads
-
     publishDir "${params.output_dir}/${lib_name}", mode: 'copy'
 
     input:
@@ -174,7 +164,7 @@ process starsolo_v2 {
     STAR \
         --runThreadN ${task.cpus} \
         --genomeDir ${genome_dir} \
-        --readFilesIn ${r1} ${r2} \
+        --readFilesIn ${r2} ${r1} \
         --readFilesCommand zcat \
         --soloType CB_UMI_Complex \
         --soloCBmatchWLtype EditDist_2 \
@@ -183,7 +173,7 @@ process starsolo_v2 {
         --soloAdapterMismatchesNmax 2 \
         --soloCBposition 0_0_2_-1 3_1_3_8 \
         --soloUMIposition 3_9_3_14 \
-        --soloFeatures Gene GeneFull \
+        --soloFeatures Gene GeneFull Velocyto \
         --soloUMIdedup 1MM_CR \
         --soloUMIfiltering MultiGeneUMI_CR \
         --outSAMtype BAM SortedByCoordinate \
