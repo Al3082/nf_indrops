@@ -55,6 +55,7 @@ params.skip_qc        = false  // --skip_qc to skip FastQC/MultiQC
 // Test mode: run starsolo + starsolo_1mm + dropest in parallel on a single library
 params.test           = false  // --test to enable test mode
 params.test_library   = 'S11_1_1'  // library to test on
+params.merged_fastq_dir = null  // --merged_fastq_dir to skip merge and use pre-merged FASTQs for dropest test
 
 // Samplesheets  (defaults point to bundled files)
 params.samplesheet = null   // overrides default per-batch samplesheet
@@ -91,7 +92,7 @@ include { demux_libraries; extract_reads; sync_reads as sync_kotov; sync_reads a
 include { starsolo_v3; starsolo_v3_1mm; starsolo_v2      } from './modules/starsolo.nf'
 include { droptag_v3; star_plain as star_plain_v3; dropest_quant as dropest_v3 } from './modules/dropest.nf'
 include { droptag_v2; star_plain as star_plain_v2; dropest_quant as dropest_v2 } from './modules/dropest.nf'
-include { droptag_v3 as droptag_v3_test; star_plain as star_plain_test; dropest_quant as dropest_test } from './modules/dropest.nf'
+include { droptag_v3 as droptag_v3_test; droptag_v3_premerged as droptag_v3_premerged_test; star_plain as star_plain_test; dropest_quant as dropest_test } from './modules/dropest.nf'
 include { trim_gene_read as trim_kotov_r1                } from './modules/trim.nf'
 include { trim_gene_read as trim_briggs_r1               } from './modules/trim.nf'
 include { check_fastq                                    } from './modules/check_fastq.nf'
@@ -278,7 +279,20 @@ workflow RUN_V3 {
             droptag_xml = file(params.droptag_v3_xml, checkIfExists: true)
             gtf_file    = file(params.gtf, checkIfExists: true)
 
-            tagged  = droptag_v3_test(test_ch, droptag_xml)
+            if (params.merged_fastq_dir) {
+                // Use pre-merged FASTQs — skip the merge step
+                premerged_ch = Channel.of(
+                    tuple(
+                        params.test_library,
+                        file("${params.merged_fastq_dir}/merged_R1.fastq.gz", checkIfExists: true),
+                        file("${params.merged_fastq_dir}/merged_R2.fastq.gz", checkIfExists: true),
+                        file("${params.merged_fastq_dir}/merged_R4.fastq.gz", checkIfExists: true)
+                    )
+                )
+                tagged  = droptag_v3_premerged_test(premerged_ch, droptag_xml)
+            } else {
+                tagged  = droptag_v3_test(test_ch, droptag_xml)
+            }
             aligned = star_plain_test(tagged, params.genome_dir)
             dropest_test(aligned, gtf_file, droptag_xml)
 

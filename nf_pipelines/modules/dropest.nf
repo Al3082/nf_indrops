@@ -44,6 +44,40 @@ process droptag_v3 {
     ${cat_r2}
     ${cat_r4}
 
+    droptag \
+        -c ${droptag_xml} \
+        -S -s \
+        -p ${task.cpus} \
+        -n ${lib_name} \
+        merged_R2.fastq.gz \
+        merged_R4.fastq.gz \
+        merged_R1.fastq.gz
+    """
+}
+
+
+/*
+ * dropTag for inDrop v3 from pre-merged FASTQs.
+ *
+ * Skips the merge step — takes already-concatenated R1/R2/R4 files directly.
+ */
+process droptag_v3_premerged {
+    tag "dropTag_v3 on ${lib_name}"
+    label "dropest"
+
+    memory params.dropest_mem
+    time params.dropest_time
+    cpus params.dropest_threads
+
+    input:
+        tuple val(lib_name), path(r1), path(r2), path(r4)
+        path droptag_xml
+
+    output:
+        tuple val(lib_name), path("${lib_name}.*.fastq.gz"), path("*.params.gz"), emit: tagged
+
+    script:
+    """
     echo "=== Staged XML (${droptag_xml}) ==="
     cat ${droptag_xml}
     echo "=== End XML ==="
@@ -53,9 +87,9 @@ process droptag_v3 {
         -S -s \
         -p ${task.cpus} \
         -n ${lib_name} \
-        merged_R2.fastq.gz \
-        merged_R4.fastq.gz \
-        merged_R1.fastq.gz
+        ${r2} \
+        ${r4} \
+        ${r1}
     """
 }
 
