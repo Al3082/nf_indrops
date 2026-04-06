@@ -17,6 +17,7 @@
 process droptag_v3 {
     tag "dropTag_v3 on ${lib_name}"
     label "dropest"
+    stageInMode 'copy'
 
     memory params.dropest_mem
     time params.dropest_time
@@ -43,6 +44,10 @@ process droptag_v3 {
     ${cat_r2}
     ${cat_r4}
 
+    echo "=== Staged XML (${droptag_xml}) ==="
+    cat ${droptag_xml}
+    echo "=== End XML ==="
+
     droptag \
         -c ${droptag_xml} \
         -S -s \
@@ -63,6 +68,7 @@ process droptag_v3 {
 process droptag_v2 {
     tag "dropTag_v2 on ${lib_name}"
     label "dropest"
+    stageInMode 'copy'
 
     memory params.dropest_mem
     time params.dropest_time
