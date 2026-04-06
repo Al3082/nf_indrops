@@ -25,7 +25,7 @@ process droptag_v3 {
 
     input:
         tuple val(lib_name), val(r1_files), val(r2_files), val(r4_files)
-        path droptag_xml
+        val droptag_xml
 
     output:
         tuple val(lib_name), path("${lib_name}.*.fastq.gz"), path("*.params.gz"), emit: tagged
@@ -71,17 +71,13 @@ process droptag_v3_premerged {
 
     input:
         tuple val(lib_name), path(r1), path(r2), path(r4)
-        path droptag_xml
+        val droptag_xml
 
     output:
         tuple val(lib_name), path("${lib_name}.*.fastq.gz"), path("*.params.gz"), emit: tagged
 
     script:
     """
-    echo "=== Staged XML (${droptag_xml}) ==="
-    cat ${droptag_xml}
-    echo "=== End XML ==="
-
     droptag \
         -c ${droptag_xml} \
         -S -s \
@@ -110,7 +106,7 @@ process droptag_v2 {
 
     input:
         tuple val(lib_name), path(r1), path(r2)
-        path droptag_xml
+        val droptag_xml
 
     output:
         tuple val(lib_name), path("${lib_name}.*.fastq.gz"), path("*.params.gz"), emit: tagged
@@ -195,8 +191,8 @@ process dropest_quant {
 
     input:
         tuple val(lib_name), path(bam), path(params_file)
-        path gtf
-        path droptag_xml
+        val gtf
+        val droptag_xml
 
     output:
         path "*"

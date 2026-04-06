@@ -276,8 +276,8 @@ workflow RUN_V3 {
             )
 
             // 3) dropEst
-            droptag_xml = file(params.droptag_v3_xml, checkIfExists: true)
-            gtf_file    = file(params.gtf, checkIfExists: true)
+            droptag_xml = params.droptag_v3_xml
+            gtf_file    = params.gtf
 
             if (params.merged_fastq_dir) {
                 // Use pre-merged FASTQs — skip the merge step
@@ -304,8 +304,8 @@ workflow RUN_V3 {
                 params.cb_whitelist2_rc
             )
         } else if (params.aligner == 'dropest') {
-            droptag_xml = file(params.droptag_v3_xml, checkIfExists: true)
-            gtf_file    = file(params.gtf, checkIfExists: true)
+            droptag_xml = params.droptag_v3_xml
+            gtf_file    = params.gtf
 
             tagged  = droptag_v3(starsolo_in, droptag_xml)
             aligned = star_plain_v3(tagged, params.genome_dir)
@@ -340,8 +340,8 @@ workflow RUN_V2 {
                 params.cb_whitelist2_sense
             )
         } else if (params.aligner == 'dropest') {
-            droptag_xml = file(params.droptag_v2_xml, checkIfExists: true)
-            gtf_file    = file(params.gtf, checkIfExists: true)
+            droptag_xml = params.droptag_v2_xml
+            gtf_file    = params.gtf
 
             tagged  = droptag_v2(briggs_v2, droptag_xml)
             aligned = star_plain_v2(tagged, params.genome_dir)
