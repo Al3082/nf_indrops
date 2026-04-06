@@ -201,7 +201,7 @@ process dropest_quant {
     """
     dropest \
         -r ${params_file} \
-        -w -V -m \
+        -w -b -F -V -m \
         -L eiEIBA \
         -g ${gtf} \
         -c ${droptag_xml} \
