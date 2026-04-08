@@ -109,11 +109,48 @@ nextflow run starsolo_indrops.nf \
   -profile hpc
 ```
 
+### Preprocessing only (no alignment)
+
+To produce trimmed+synced FASTQs without running alignment, use `--preprocess_only`. Processed files are published as real copies (not symlinks) to `<output_dir>/processed_fastqs/`.
+
+```bash
+nextflow run starsolo_indrops.nf \
+  --batch v3_s8_14 \
+  --preprocess_only \
+  --fastq_dir /path/to/fastq_files \
+  --output_dir /path/to/output \
+  -profile hpc
+```
+
+`--genome_dir` and `--aligner` are not required in this mode.
+
+### Disk-constrained preprocessing (split Kotov runs)
+
+When disk space is limited, Kotov runs A and B can be processed separately. Briggs is processed with the first run and skipped in the second to avoid redundant work:
+
+```bash
+# Step 1: Kotov runA + Briggs
+nextflow run starsolo_indrops.nf \
+  --batch v3_s8_14 --preprocess_only --kotov_runs runA ...
+
+# Clean work directory to free disk
+rm -rf nf_work
+
+# Step 2: Kotov runB only (Briggs already in processed_fastqs/)
+nextflow run starsolo_indrops.nf \
+  --batch v3_s8_14 --preprocess_only --kotov_runs runB --skip_briggs ...
+
+rm -rf nf_work
+```
+
 ### Optional flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--aligner` | `starsolo` | Aligner: `starsolo` or `dropest` |
+| `--preprocess_only` | `false` | Stop after trim+sync, publish FASTQs (skip alignment/QC) |
+| `--kotov_runs` | `both` | Which Kotov sequencing runs to process: `both`, `runA`, or `runB` |
+| `--skip_briggs` | `false` | Skip Briggs preprocessing (use with `--preprocess_only` when Briggs was already processed) |
 | `--skip_preflight` | `false` | Skip pre-flight FASTQ sanity checks |
 | `--skip_qc` | `false` | Skip FastQC/MultiQC |
 | `--test` | `false` | Test mode: run all aligners on a single library |
@@ -183,6 +220,7 @@ Processes retry up to 2 times on SLURM OOM (exit 137), timeout (140), or segfaul
 
 | Directory | Contents |
 |-----------|----------|
+| `<output_dir>/processed_fastqs/` | Trimmed and synced FASTQs ready for alignment (always published) |
 | `<output_dir>/<library>/STAR/` | STARsolo count matrices (Gene, GeneFull, Velocyto), sorted BAM, logs |
 | `<output_dir>/<library>/dropest/` | dropEst count matrices and cell statistics |
 | `<output_dir>/cutadapt_stats/` | Per-run demultiplexing statistics |

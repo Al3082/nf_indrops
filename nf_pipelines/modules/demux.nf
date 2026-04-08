@@ -98,6 +98,8 @@ process sync_reads {
     tag "sync ${sample_id}"
     label "seqtk"
 
+    publishDir "${params.output_dir}/processed_fastqs", mode: 'copy', pattern: "*.synced_R*.fastq.gz"
+
     input:
         tuple val(sample_id), path(trimmed_r1), path(r2), path(r4)
 
@@ -141,6 +143,8 @@ process sync_reads {
 process sync_single_read {
     tag "sync ${sample_id}"
     label "seqtk"
+
+    publishDir "${params.output_dir}/processed_fastqs", mode: 'copy', pattern: "*.synced.fastq.gz"
 
     input:
         tuple val(sample_id), path(reference_read), path(target_read)

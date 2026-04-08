@@ -9,6 +9,11 @@
  *   nextflow run starsolo_indrops.nf --batch v3_s16_22 [options]
  *   nextflow run starsolo_indrops.nf --batch v2        [options]
  *
+ * Preprocessing options:
+ *   --preprocess_only      Stop after trim+sync, publish FASTQs to <output_dir>/processed_fastqs/
+ *   --kotov_runs both|runA|runB   Which Kotov sequencing runs to process (default: both)
+ *   --skip_briggs          Skip Briggs preprocessing (use when already processed in a prior run)
+ *
  * Batches:
  *   v3_s8_14  : Kotov GSM5949469 (stages 8-14)  + Briggs Pool 3 (21 v3 libraries)
  *   v3_s16_22 : Kotov GSM5949468 (stages 16-22) + Briggs Pool 4 (23 v3 libraries)
@@ -51,6 +56,11 @@ params.adapter_fasta = null  // required: e.g. illumina_nextseq_p7.fasta
 // Optional QC steps
 params.skip_preflight = false  // --skip_preflight to skip pre-flight FASTQ checks
 params.skip_qc        = false  // --skip_qc to skip FastQC/MultiQC
+
+// Preprocessing options
+params.preprocess_only = false  // --preprocess_only to stop after trim+sync (publish FASTQs, skip alignment)
+params.kotov_runs      = 'both' // --kotov_runs both|runA|runB — which Kotov sequencing runs to process
+params.skip_briggs     = false  // --skip_briggs to skip Briggs preprocessing (use when Briggs was already processed)
 
 // Test mode: run starsolo + starsolo_1mm + dropest in parallel on a single library
 params.test           = false  // --test to enable test mode
@@ -121,10 +131,16 @@ workflow RUN_V3 {
 
         // ── 0. Pre-flight checks on raw Kotov and first Briggs file ───────────
 
-        kotov_check_ch = Channel.of(
-            tuple('kotov_runA', runA[0], runA[1], runA[3]),
-            tuple('kotov_runB', runB[0], runB[1], runB[3])
-        )
+        if (params.kotov_runs == 'runA') {
+            kotov_check_ch = Channel.of(tuple('kotov_runA', runA[0], runA[1], runA[3]))
+        } else if (params.kotov_runs == 'runB') {
+            kotov_check_ch = Channel.of(tuple('kotov_runB', runB[0], runB[1], runB[3]))
+        } else {
+            kotov_check_ch = Channel.of(
+                tuple('kotov_runA', runA[0], runA[1], runA[3]),
+                tuple('kotov_runB', runB[0], runB[1], runB[3])
+            )
+        }
 
         // ── 4. Load Briggs samplesheet, build file paths ──────────────────────
 
@@ -140,10 +156,13 @@ workflow RUN_V3 {
             }
 
         if (!params.skip_preflight) {
-            check_fastq(
-                kotov_check_ch.mix(
+            preflight_ch = params.skip_briggs
+                ? kotov_check_ch
+                : kotov_check_ch.mix(
                     briggs_ch.first().map { lib, r1, r2, r4 -> tuple("briggs_${lib}", r1, r2, r4) }
-                ),
+                )
+            check_fastq(
+                preflight_ch,
                 file(params.cb_whitelist1),
                 file(params.cb_whitelist2_sense),
                 file(params.cb_whitelist2_rc)
@@ -154,10 +173,16 @@ workflow RUN_V3 {
         //    Input:  (run_id, r3_fastq)
         //    Output: (run_id, [lib1.fastq.gz, lib2.fastq.gz, ...])
 
-        kotov_runs_r3 = Channel.of(
-            tuple('runA', runA[2]),
-            tuple('runB', runB[2])
-        )
+        if (params.kotov_runs == 'runA') {
+            kotov_runs_r3 = Channel.of(tuple('runA', runA[2]))
+        } else if (params.kotov_runs == 'runB') {
+            kotov_runs_r3 = Channel.of(tuple('runB', runB[2]))
+        } else {
+            kotov_runs_r3 = Channel.of(
+                tuple('runA', runA[2]),
+                tuple('runB', runB[2])
+            )
+        }
 
         demux_out = demux_libraries(kotov_runs_r3, barcodes_fa)
 
@@ -168,10 +193,16 @@ workflow RUN_V3 {
 
         // ── 2. Build channel of Kotov R1/R2/R4 per run ───────────────────────
 
-        kotov_reads = Channel.of(
-            tuple('runA', runA[0], runA[1], runA[3]),
-            tuple('runB', runB[0], runB[1], runB[3])
-        )
+        if (params.kotov_runs == 'runA') {
+            kotov_reads = Channel.of(tuple('runA', runA[0], runA[1], runA[3]))
+        } else if (params.kotov_runs == 'runB') {
+            kotov_reads = Channel.of(tuple('runB', runB[0], runB[1], runB[3]))
+        } else {
+            kotov_reads = Channel.of(
+                tuple('runA', runA[0], runA[1], runA[3]),
+                tuple('runB', runB[0], runB[1], runB[3])
+            )
+        }
 
         // Join demuxed IDs with the corresponding run's R1/R2/R4
         // demux_flat : (run_id, lib_name, demuxed_r3)
@@ -223,55 +254,71 @@ workflow RUN_V3 {
 
         // ── 3c. Trim Briggs R1 (gene reads) ──────────────────────────────────
 
-        briggs_trim_in = briggs_ch.map { lib, r1, r2, r4 -> tuple(lib, r1) }
-        trimmed_briggs = trim_briggs_r1(briggs_trim_in, adapter_fa).trimmed
+        if (!params.skip_briggs) {
+            briggs_trim_in = briggs_ch.map { lib, r1, r2, r4 -> tuple(lib, r1) }
+            trimmed_briggs = trim_briggs_r1(briggs_trim_in, adapter_fa).trimmed
 
-        // Re-sync Briggs R2/R4 with trimmed R1
-        briggs_sync_in = briggs_ch
-            .map { lib, r1, r2, r4 -> tuple(lib, r2, r4) }
-            .join(trimmed_briggs)
-            .map { lib, r2, r4, tr1 -> tuple(lib, tr1, r2, r4) }
+            // Re-sync Briggs R2/R4 with trimmed R1
+            briggs_sync_in = briggs_ch
+                .map { lib, r1, r2, r4 -> tuple(lib, r2, r4) }
+                .join(trimmed_briggs)
+                .map { lib, r2, r4, tr1 -> tuple(lib, tr1, r2, r4) }
 
-        briggs_sync_out = sync_briggs(briggs_sync_in)
-        briggs_trimmed = trimmed_briggs
-            .join(briggs_sync_out.reads)
-            .map { lib, tr1, r2, r4 -> tuple(lib, tr1, r2, r4) }
+            briggs_sync_out = sync_briggs(briggs_sync_in)
+            briggs_trimmed = trimmed_briggs
+                .join(briggs_sync_out.reads)
+                .map { lib, tr1, r2, r4 -> tuple(lib, tr1, r2, r4) }
+        }
 
         // ── 3d. Consolidate read statistics ──────────────────────────────────
 
-        consolidate_stats(
-            params.batch,
-            demux_out.counts
-                .mix(extract_out.stats)
-                .mix(trim_kotov_r1.out.counts)
-                .mix(trim_briggs_r1.out.counts)
-                .mix(kotov_sync_out.stats)
-                .mix(briggs_sync_out.stats)
-                .collect()
-        )
+        if (params.skip_briggs) {
+            consolidate_stats(
+                params.batch,
+                demux_out.counts
+                    .mix(extract_out.stats)
+                    .mix(trim_kotov_r1.out.counts)
+                    .mix(kotov_sync_out.stats)
+                    .collect()
+            )
+        } else {
+            consolidate_stats(
+                params.batch,
+                demux_out.counts
+                    .mix(extract_out.stats)
+                    .mix(trim_kotov_r1.out.counts)
+                    .mix(trim_briggs_r1.out.counts)
+                    .mix(kotov_sync_out.stats)
+                    .mix(briggs_sync_out.stats)
+                    .collect()
+            )
+        }
 
         // ── 4. Join Kotov (grouped) + Briggs per library ──────────────────────
 
-        starsolo_in = kotov_grouped
-            .join(briggs_trimmed, by: 0)
-            .map { lib_name, run_ids, kotov_r1s, kotov_r2s, kotov_r4s,
-                   briggs_r1, briggs_r2, briggs_r4 ->
-                all_r1 = (kotov_r1s + [briggs_r1]).collect { it.toString() }
-                all_r2 = (kotov_r2s + [briggs_r2]).collect { it.toString() }
-                all_r4 = (kotov_r4s + [briggs_r4]).collect { it.toString() }
-                tuple(lib_name, all_r1, all_r2, all_r4)
+        if (params.preprocess_only) {
+            // Stop here — processed FASTQs are published via publishDir
+        } else {
+            starsolo_in = kotov_grouped
+                .join(briggs_trimmed, by: 0)
+                .map { lib_name, run_ids, kotov_r1s, kotov_r2s, kotov_r4s,
+                       briggs_r1, briggs_r2, briggs_r4 ->
+                    all_r1 = (kotov_r1s + [briggs_r1]).collect { it.toString() }
+                    all_r2 = (kotov_r2s + [briggs_r2]).collect { it.toString() }
+                    all_r4 = (kotov_r4s + [briggs_r4]).collect { it.toString() }
+                    tuple(lib_name, all_r1, all_r2, all_r4)
+                }
+
+            // ── 5. FastQC on per-library reads ────────────────────────────────────
+
+            if (!params.skip_qc) {
+                fastqc(starsolo_in)
+                multiqc(fastqc.out.reports.collect())
             }
 
-        // ── 5. FastQC on per-library reads ────────────────────────────────────
+            // ── 6. Alignment & quantification ────────────────────────────────────
 
-        if (!params.skip_qc) {
-            fastqc(starsolo_in)
-            multiqc(fastqc.out.reports.collect())
-        }
-
-        // ── 6. Alignment & quantification ────────────────────────────────────
-
-        if (params.test) {
+            if (params.test) {
             // Test mode: run all three aligners on a single library
             test_ch = starsolo_in.filter { lib_name, r1, r2, r4 ->
                 lib_name == params.test_library
@@ -329,6 +376,7 @@ workflow RUN_V3 {
             aligned = star_plain_v3(tagged, params.genome_dir)
             dropest_v3(aligned, gtf_file, droptag_xml)
         }
+        } // end !preprocess_only
 }
 
 
@@ -382,7 +430,9 @@ workflow RUN_V2 {
 
         // ── Alignment ────────────────────────────────────────────────────
 
-        if (params.aligner == 'starsolo') {
+        if (params.preprocess_only) {
+            // Stop here — processed FASTQs are published via publishDir
+        } else if (params.aligner == 'starsolo') {
             starsolo_v2(
                 briggs_v2,
                 params.genome_dir,
@@ -407,11 +457,20 @@ workflow {
     if (!params.batch) error "Please specify --batch (v3_s8_14 | v3_s16_22 | v2)"
     if (!params.fastq_dir)  error "Please specify --fastq_dir"
     if (!params.output_dir) error "Please specify --output_dir"
-    if (!params.genome_dir) error "Please specify --genome_dir"
-    if (params.aligner != 'starsolo' && params.aligner != 'dropest') {
+    if (!params.preprocess_only && !params.genome_dir) error "Please specify --genome_dir"
+    if (params.kotov_runs != 'both' && params.kotov_runs != 'runA' && params.kotov_runs != 'runB') {
+        error "Unknown --kotov_runs '${params.kotov_runs}'. Use: both | runA | runB"
+    }
+    if (params.batch == 'v2' && params.kotov_runs != 'both') {
+        log.warn "--kotov_runs is ignored for v2 batch (no Kotov data)"
+    }
+    if (params.skip_briggs && !params.preprocess_only) {
+        error "--skip_briggs can only be used with --preprocess_only"
+    }
+    if (!params.preprocess_only && params.aligner != 'starsolo' && params.aligner != 'dropest') {
         error "Unknown --aligner '${params.aligner}'. Use: starsolo | dropest"
     }
-    if (params.aligner == 'dropest' || params.test) {
+    if (!params.preprocess_only && (params.aligner == 'dropest' || params.test)) {
         if (!params.dropest_container) error "Please specify --dropest_container when using --aligner dropest or --test"
         if (!params.gtf) error "Please specify --gtf (GTF annotation) when using --aligner dropest or --test"
     }

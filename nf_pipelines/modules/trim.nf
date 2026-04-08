@@ -11,6 +11,7 @@ process trim_gene_read {
     label "cutadapt"
 
     publishDir "${params.output_dir}/cutadapt_trim_stats", mode: 'copy', pattern: "*.cutadapt_trim_stats.txt"
+    publishDir "${params.output_dir}/processed_fastqs", mode: 'copy', pattern: "*.trimmed_R1.fastq.gz"
 
     input:
         tuple val(sample_id), path(r1)
