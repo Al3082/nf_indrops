@@ -19,6 +19,8 @@ process demux_libraries {
 
     script:
     """
+    set -euo pipefail
+
     cutadapt \
         -e 1 \
         -j ${task.cpus} \
@@ -62,6 +64,8 @@ process extract_reads {
 
     script:
     """
+    set -euo pipefail
+
     # Extract spot numbers from demuxed R3 read names (e.g. SRR18313234.1 -> 1)
     seqtk comp ${demuxed_r3} | cut -f1 | cut -d. -f2 > spots.txt
 
@@ -71,9 +75,9 @@ process extract_reads {
     r4_prefix=\$(zcat ${r4} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
 
     # Rebuild name lists with correct SRR prefix for each read file
-    awk -v p="\${r1_prefix}" '{print p"."\$0}' spots.txt | sort > r1_ids.txt
-    awk -v p="\${r2_prefix}" '{print p"."\$0}' spots.txt | sort > r2_ids.txt
-    awk -v p="\${r4_prefix}" '{print p"."\$0}' spots.txt | sort > r4_ids.txt
+    awk -v p="\${r1_prefix}" '{print p"."\$0}' spots.txt > r1_ids.txt
+    awk -v p="\${r2_prefix}" '{print p"."\$0}' spots.txt > r2_ids.txt
+    awk -v p="\${r4_prefix}" '{print p"."\$0}' spots.txt > r4_ids.txt
 
     seqtk subseq ${r1} r1_ids.txt | gzip -c > ${lib_name}.${run_id}.R1.fastq.gz
     seqtk subseq ${r2} r2_ids.txt | gzip -c > ${lib_name}.${run_id}.R2.fastq.gz
@@ -111,6 +115,8 @@ process sync_reads {
 
     script:
     """
+    set -euo pipefail
+
     # Extract spot numbers from trimmed R1 (e.g. SRR18313232.1 -> 1)
     seqtk comp ${trimmed_r1} | cut -f1 | cut -d. -f2 > spots.txt
 
@@ -119,8 +125,8 @@ process sync_reads {
     r4_prefix=\$(zcat ${r4} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
 
     # Rebuild name lists with correct SRR prefix
-    awk -v p="\${r2_prefix}" '{print p"."\$0}' spots.txt | sort > r2_ids.txt
-    awk -v p="\${r4_prefix}" '{print p"."\$0}' spots.txt | sort > r4_ids.txt
+    awk -v p="\${r2_prefix}" '{print p"."\$0}' spots.txt > r2_ids.txt
+    awk -v p="\${r4_prefix}" '{print p"."\$0}' spots.txt > r4_ids.txt
 
     seqtk subseq ${r2} r2_ids.txt | gzip -c > ${sample_id}.synced_R2.fastq.gz
     seqtk subseq ${r4} r4_ids.txt | gzip -c > ${sample_id}.synced_R4.fastq.gz
@@ -155,6 +161,8 @@ process sync_single_read {
 
     script:
     """
+    set -euo pipefail
+
     # Extract spot numbers from the reference read (the one that survived trimming)
     seqtk comp ${reference_read} | cut -f1 | cut -d. -f2 > spots.txt
 
@@ -162,7 +170,7 @@ process sync_single_read {
     target_prefix=\$(zcat ${target_read} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
 
     # Rebuild name list with correct SRR prefix
-    awk -v p="\${target_prefix}" '{print p"."\$0}' spots.txt | sort > ids.txt
+    awk -v p="\${target_prefix}" '{print p"."\$0}' spots.txt > ids.txt
 
     seqtk subseq ${target_read} ids.txt | gzip -c > ${sample_id}.synced.fastq.gz
 

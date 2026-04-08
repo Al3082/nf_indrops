@@ -24,6 +24,8 @@ process trim_gene_read {
 
     script:
     """
+    set -euo pipefail
+
     input_n=\$(zcat ${r1} | awk 'END{print NR/4}')
 
     cutadapt \

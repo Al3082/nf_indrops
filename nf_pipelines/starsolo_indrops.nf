@@ -272,9 +272,13 @@ workflow RUN_V3 {
 
         // ── 3d. Consolidate read statistics ──────────────────────────────────
 
+        stats_id = params.kotov_runs == 'both'
+            ? params.batch
+            : "${params.batch}_${params.kotov_runs}" + (params.skip_briggs ? '_kotov_only' : '')
+
         if (params.skip_briggs) {
             consolidate_stats(
-                params.batch,
+                stats_id,
                 demux_out.counts
                     .mix(extract_out.stats)
                     .mix(trim_kotov_r1.out.counts)
@@ -283,7 +287,7 @@ workflow RUN_V3 {
             )
         } else {
             consolidate_stats(
-                params.batch,
+                stats_id,
                 demux_out.counts
                     .mix(extract_out.stats)
                     .mix(trim_kotov_r1.out.counts)
