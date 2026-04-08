@@ -20,6 +20,8 @@ process fastqc {
     script:
     all_files = ([r1_files, r2_files, r4_files].flatten()).join(' ')
     """
+    set -euo pipefail
+
     fastqc --threads ${task.cpus} --outdir . ${all_files}
     """
 }
@@ -39,6 +41,8 @@ process multiqc {
 
     script:
     """
+    set -euo pipefail
+
     multiqc .
     """
 }

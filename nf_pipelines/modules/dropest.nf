@@ -35,6 +35,8 @@ process droptag_v3 {
     cat_r4 = r4_list.size() > 1 ? "cat ${r4_list.join(' ')} > merged_R4.fastq.gz" : "ln -s ${r4_list[0]} merged_R4.fastq.gz"
 
     """
+    set -euo pipefail
+
     ${cat_r1}
     ${cat_r2}
     ${cat_r4}
@@ -69,6 +71,8 @@ process droptag_v3_premerged {
 
     script:
     """
+    set -euo pipefail
+
     droptag \
         -c ${droptag_xml} \
         -S -s \
@@ -99,6 +103,8 @@ process droptag_v2 {
 
     script:
     """
+    set -euo pipefail
+
     droptag \
         -c ${droptag_xml} \
         -S -s \
@@ -129,6 +135,8 @@ process star_plain {
     script:
     reads_str = tagged_reads instanceof List ? tagged_reads.join(',') : tagged_reads
     """
+    set -euo pipefail
+
     mkdir -p STAR
 
     STAR \
@@ -177,6 +185,8 @@ process dropest_quant {
 
     script:
     """
+    set -euo pipefail
+
     dropest \
         -r ${params_file} \
         -w -b -F -V -m \

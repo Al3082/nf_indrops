@@ -69,10 +69,10 @@ process extract_reads {
     # Extract spot numbers from demuxed R3 read names (e.g. SRR18313234.1 -> 1)
     seqtk comp ${demuxed_r3} | cut -f1 | cut -d. -f2 > spots.txt
 
-    # Get the SRR prefix for each target file
-    r1_prefix=\$(zcat ${r1} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
-    r2_prefix=\$(zcat ${r2} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
-    r4_prefix=\$(zcat ${r4} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
+    # Get the SRR prefix for each target file (disable pipefail: head -1 causes SIGPIPE on zcat)
+    r1_prefix=\$(set +o pipefail; zcat ${r1} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
+    r2_prefix=\$(set +o pipefail; zcat ${r2} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
+    r4_prefix=\$(set +o pipefail; zcat ${r4} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
 
     # Rebuild name lists with correct SRR prefix for each read file
     awk -v p="\${r1_prefix}" '{print p"."\$0}' spots.txt > r1_ids.txt
@@ -120,9 +120,9 @@ process sync_reads {
     # Extract spot numbers from trimmed R1 (e.g. SRR18313232.1 -> 1)
     seqtk comp ${trimmed_r1} | cut -f1 | cut -d. -f2 > spots.txt
 
-    # Get the SRR prefix for each target file
-    r2_prefix=\$(zcat ${r2} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
-    r4_prefix=\$(zcat ${r4} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
+    # Get the SRR prefix for each target file (disable pipefail: head -1 causes SIGPIPE on zcat)
+    r2_prefix=\$(set +o pipefail; zcat ${r2} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
+    r4_prefix=\$(set +o pipefail; zcat ${r4} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
 
     # Rebuild name lists with correct SRR prefix
     awk -v p="\${r2_prefix}" '{print p"."\$0}' spots.txt > r2_ids.txt
@@ -166,8 +166,8 @@ process sync_single_read {
     # Extract spot numbers from the reference read (the one that survived trimming)
     seqtk comp ${reference_read} | cut -f1 | cut -d. -f2 > spots.txt
 
-    # Get the SRR prefix for the target file
-    target_prefix=\$(zcat ${target_read} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
+    # Get the SRR prefix for the target file (disable pipefail: head -1 causes SIGPIPE on zcat)
+    target_prefix=\$(set +o pipefail; zcat ${target_read} | head -1 | awk '{sub(/^@/,""); sub(/\\..*/,""); print}')
 
     # Rebuild name list with correct SRR prefix
     awk -v p="\${target_prefix}" '{print p"."\$0}' spots.txt > ids.txt

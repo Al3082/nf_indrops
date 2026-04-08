@@ -44,6 +44,8 @@ process starsolo_v3 {
     bc_str = (0..<r2_list.size()).collect { "bc_${it}.fastq.gz" }.join(',')
 
     """
+    set -euo pipefail
+
     mkdir -p STAR
 
     ${merge_cmds}
@@ -105,6 +107,8 @@ process starsolo_v3_1mm {
     bc_str = (0..<r2_list.size()).collect { "bc_${it}.fastq.gz" }.join(',')
 
     """
+    set -euo pipefail
+
     mkdir -p STAR
 
     ${merge_cmds}
@@ -159,6 +163,8 @@ process starsolo_v2 {
 
     script:
     """
+    set -euo pipefail
+
     mkdir -p STAR
 
     STAR \
