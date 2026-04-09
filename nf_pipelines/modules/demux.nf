@@ -35,8 +35,10 @@ process demux_libraries {
     raw_n=\$(zcat ${r3_fastq} | awk 'END{print NR/4}')
     echo -e "run\\tlibrary\\tstep\\treads" > ${run_id}.demux_counts.tsv
     echo -e "${run_id}\\tall\\traw_r3\\t\${raw_n}" >> ${run_id}.demux_counts.tsv
+    input_base=\$(basename "${r3_fastq}" .fastq.gz)
     for f in *.fastq.gz; do
         lib=\$(basename "\$f" .fastq.gz)
+        [[ "\$lib" == "\$input_base" ]] && continue
         n=\$(zcat "\$f" | awk 'END{print NR/4}')
         echo -e "${run_id}\\t\${lib}\\tdemuxed\\t\${n}" >> ${run_id}.demux_counts.tsv
     done

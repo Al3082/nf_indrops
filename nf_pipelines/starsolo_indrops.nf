@@ -13,6 +13,7 @@
  *   --preprocess_only      Stop after trim+sync, publish FASTQs to <output_dir>/processed_fastqs/
  *   --kotov_runs both|runA|runB   Which Kotov sequencing runs to process (default: both)
  *   --skip_briggs          Skip Briggs preprocessing (use when already processed in a prior run)
+ *   --processed_fastq_dir  Skip all preprocessing and load pre-processed FASTQs from this directory
  *
  * Batches:
  *   v3_s8_14  : Kotov GSM5949469 (stages 8-14)  + Briggs Pool 3 (21 v3 libraries)
@@ -65,7 +66,8 @@ params.skip_briggs     = false  // --skip_briggs to skip Briggs preprocessing (u
 // Test mode: run starsolo + starsolo_1mm + dropest in parallel on a single library
 params.test           = false  // --test to enable test mode
 params.test_library   = 'S11_1_1'  // library to test on
-params.merged_fastq_dir = null  // --merged_fastq_dir to skip merge and use pre-merged FASTQs for dropest test
+params.merged_fastq_dir    = null  // --merged_fastq_dir to skip merge and use pre-merged FASTQs for dropest test
+params.processed_fastq_dir = null  // --processed_fastq_dir to skip preprocessing and load pre-processed FASTQs directly
 
 // Samplesheets  (defaults point to bundled files)
 params.samplesheet = null   // overrides default per-batch samplesheet
@@ -129,6 +131,54 @@ workflow RUN_V3 {
 
     main:
 
+        if (params.processed_fastq_dir) {
+
+            // ── Skip preprocessing: load pre-processed FASTQs directly ───────
+            //    Expected naming in processed_fastq_dir/:
+            //      {lib}__{run}.trimmed_R1.fastq.gz   (Kotov gene reads)
+            //      {lib}__{run}.synced_R2.fastq.gz    (Kotov CB1)
+            //      {lib}__{run}.synced_R4.fastq.gz    (Kotov CB2+UMI)
+            //      {lib}.trimmed_R1.fastq.gz          (Briggs gene reads)
+            //      {lib}.synced_R2.fastq.gz           (Briggs CB1)
+            //      {lib}.synced_R4.fastq.gz           (Briggs CB2+UMI)
+
+            pdir = params.processed_fastq_dir
+            if (!file(pdir).isDirectory()) error "--processed_fastq_dir '${pdir}' does not exist or is not a directory"
+
+            r1_ch = Channel.fromPath("${pdir}/*.trimmed_R1.fastq.gz", checkIfExists: true)
+                .map { f ->
+                    def base = f.name.replace('.trimmed_R1.fastq.gz', '')
+                    def lib = base.contains('__') ? base.split('__')[0] : base
+                    tuple(lib, f)
+                }
+                .groupTuple()
+
+            r2_ch = Channel.fromPath("${pdir}/*.synced_R2.fastq.gz")
+                .map { f ->
+                    def base = f.name.replace('.synced_R2.fastq.gz', '')
+                    def lib = base.contains('__') ? base.split('__')[0] : base
+                    tuple(lib, f)
+                }
+                .groupTuple()
+
+            r4_ch = Channel.fromPath("${pdir}/*.synced_R4.fastq.gz")
+                .map { f ->
+                    def base = f.name.replace('.synced_R4.fastq.gz', '')
+                    def lib = base.contains('__') ? base.split('__')[0] : base
+                    tuple(lib, f)
+                }
+                .groupTuple()
+
+            starsolo_in = r1_ch.join(r2_ch).join(r4_ch)
+                .map { lib, r1s, r2s, r4s ->
+                    tuple(lib,
+                          r1s.sort { it.name }.collect { it.toString() },
+                          r2s.sort { it.name }.collect { it.toString() },
+                          r4s.sort { it.name }.collect { it.toString() })
+                }
+
+        } else {
+
         // ── 0. Pre-flight checks on raw Kotov and first Briggs file ───────────
 
         if (params.kotov_runs == 'runA') {
@@ -141,8 +191,6 @@ workflow RUN_V3 {
                 tuple('kotov_runB', runB[0], runB[1], runB[3])
             )
         }
-
-        // ── 4. Load Briggs samplesheet, build file paths ──────────────────────
 
         briggs_ch = Channel.fromPath(samplesheet)
             .splitCsv(header: true)
@@ -312,15 +360,20 @@ workflow RUN_V3 {
                     all_r4 = (kotov_r4s + [briggs_r4]).collect { it.toString() }
                     tuple(lib_name, all_r1, all_r2, all_r4)
                 }
+        }
 
-            // ── 5. FastQC on per-library reads ────────────────────────────────────
+        } // end else (preprocessing path)
 
-            if (!params.skip_qc) {
+        // ── 5. Alignment & quantification (shared by both paths) ─────────────
+        //    starsolo_in is built either from --processed_fastq_dir or from
+        //    the preprocessing pipeline above.
+
+        if (!params.preprocess_only) {
+
+            if (!params.skip_qc && !params.processed_fastq_dir) {
                 fastqc(starsolo_in)
                 multiqc(fastqc.out.reports.collect())
             }
-
-            // ── 6. Alignment & quantification ────────────────────────────────────
 
             if (params.test) {
             // Test mode: run all three aligners on a single library
@@ -459,7 +512,7 @@ workflow RUN_V2 {
 workflow {
 
     if (!params.batch) error "Please specify --batch (v3_s8_14 | v3_s16_22 | v2)"
-    if (!params.fastq_dir)  error "Please specify --fastq_dir"
+    if (!params.processed_fastq_dir && !params.fastq_dir) error "Please specify --fastq_dir (or --processed_fastq_dir to skip preprocessing)"
     if (!params.output_dir) error "Please specify --output_dir"
     if (!params.preprocess_only && !params.genome_dir) error "Please specify --genome_dir"
     if (params.kotov_runs != 'both' && params.kotov_runs != 'runA' && params.kotov_runs != 'runB') {
@@ -467,6 +520,12 @@ workflow {
     }
     if (params.batch == 'v2' && params.kotov_runs != 'both') {
         log.warn "--kotov_runs is ignored for v2 batch (no Kotov data)"
+    }
+    if (params.batch == 'v2' && params.processed_fastq_dir) {
+        error "--processed_fastq_dir is not supported for v2 batch"
+    }
+    if (params.processed_fastq_dir && params.preprocess_only) {
+        error "--processed_fastq_dir and --preprocess_only are mutually exclusive"
     }
     if (params.skip_briggs && !params.preprocess_only) {
         error "--skip_briggs can only be used with --preprocess_only"
@@ -478,14 +537,17 @@ workflow {
         if (!params.dropest_container) error "Please specify --dropest_container when using --aligner dropest or --test"
         if (!params.gtf) error "Please specify --gtf (GTF annotation) when using --aligner dropest or --test"
     }
-    if (!params.adapter_fasta) {
+    if (!params.processed_fastq_dir && !params.adapter_fasta) {
         error "Please specify --adapter_fasta (e.g. illumina_nextseq_p7.fasta) for gene-read trimming"
     }
     if (params.batch == 'v2' && (!params.cb_whitelist1_rc || !params.cb_whitelist2_sense)) {
         error "Please specify --cb_whitelist1_rc and --cb_whitelist2_sense (v2 whitelists)"
     }
-    if (params.batch != 'v2' && (!params.cb_whitelist1 || !params.cb_whitelist2_sense || !params.cb_whitelist2_rc)) {
+    if (params.batch != 'v2' && !params.processed_fastq_dir && (!params.cb_whitelist1 || !params.cb_whitelist2_sense || !params.cb_whitelist2_rc)) {
         error "Please specify --cb_whitelist1, --cb_whitelist2_sense and --cb_whitelist2_rc (v3 whitelists)"
+    }
+    if (params.batch != 'v2' && params.processed_fastq_dir && (!params.cb_whitelist2_sense || !params.cb_whitelist2_rc)) {
+        error "Please specify --cb_whitelist2_sense and --cb_whitelist2_rc (needed for alignment)"
     }
 
     if (params.batch == 'v3_s8_14') {
@@ -493,28 +555,37 @@ workflow {
         samplesheet = params.samplesheet
             ?: "${projectDir}/../inputs/samplesheet_v3_s8_14.csv"
 
-        RUN_V3(
-            file(samplesheet),
-            file(params.barcodes_v3_s8_14),
-            [fastq(params.kotov_s8_14_runA_r1), fastq(params.kotov_s8_14_runA_r2),
-             fastq(params.kotov_s8_14_runA_r3), fastq(params.kotov_s8_14_runA_r4)],
-            [fastq(params.kotov_s8_14_runB_r1), fastq(params.kotov_s8_14_runB_r2),
-             fastq(params.kotov_s8_14_runB_r3), fastq(params.kotov_s8_14_runB_r4)]
-        )
+        if (params.processed_fastq_dir) {
+            // Skip raw FASTQ resolution — preprocessing will be bypassed
+            RUN_V3(file(samplesheet), file(params.barcodes_v3_s8_14), [null,null,null,null], [null,null,null,null])
+        } else {
+            RUN_V3(
+                file(samplesheet),
+                file(params.barcodes_v3_s8_14),
+                [fastq(params.kotov_s8_14_runA_r1), fastq(params.kotov_s8_14_runA_r2),
+                 fastq(params.kotov_s8_14_runA_r3), fastq(params.kotov_s8_14_runA_r4)],
+                [fastq(params.kotov_s8_14_runB_r1), fastq(params.kotov_s8_14_runB_r2),
+                 fastq(params.kotov_s8_14_runB_r3), fastq(params.kotov_s8_14_runB_r4)]
+            )
+        }
 
     } else if (params.batch == 'v3_s16_22') {
 
         samplesheet = params.samplesheet
             ?: "${projectDir}/../inputs/samplesheet_v3_s16_22.csv"
 
-        RUN_V3(
-            file(samplesheet),
-            file(params.barcodes_v3_s16_22),
-            [fastq(params.kotov_s16_22_runA_r1), fastq(params.kotov_s16_22_runA_r2),
-             fastq(params.kotov_s16_22_runA_r3), fastq(params.kotov_s16_22_runA_r4)],
-            [fastq(params.kotov_s16_22_runB_r1), fastq(params.kotov_s16_22_runB_r2),
-             fastq(params.kotov_s16_22_runB_r3), fastq(params.kotov_s16_22_runB_r4)]
-        )
+        if (params.processed_fastq_dir) {
+            RUN_V3(file(samplesheet), file(params.barcodes_v3_s16_22), [null,null,null,null], [null,null,null,null])
+        } else {
+            RUN_V3(
+                file(samplesheet),
+                file(params.barcodes_v3_s16_22),
+                [fastq(params.kotov_s16_22_runA_r1), fastq(params.kotov_s16_22_runA_r2),
+                 fastq(params.kotov_s16_22_runA_r3), fastq(params.kotov_s16_22_runA_r4)],
+                [fastq(params.kotov_s16_22_runB_r1), fastq(params.kotov_s16_22_runB_r2),
+                 fastq(params.kotov_s16_22_runB_r3), fastq(params.kotov_s16_22_runB_r4)]
+            )
+        }
 
     } else if (params.batch == 'v2') {
 
