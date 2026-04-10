@@ -20,7 +20,7 @@ process starsolo_v3 {
     tag "STARsolo_v3 on ${lib_name}"
     label "star"
 
-    publishDir "${params.output_dir}/${lib_name}", mode: 'copy'
+    publishDir "${params.output_dir}/${lib_name}/starsolo_editdist2", mode: 'copy'
 
     input:
         tuple val(lib_name), val(r1_files), val(r2_files), val(r4_files)
@@ -62,7 +62,6 @@ process starsolo_v3 {
         --soloUMIposition 0_16_0_21 \
         --soloFeatures Gene GeneFull Velocyto \
         --soloUMIdedup 1MM_CR \
-        --soloUMIfiltering MultiGeneUMI_CR \
         --outSAMtype BAM SortedByCoordinate \
         --outSAMunmapped Within \
         --outSAMattributes NH HI AS nM CR CY UR UY CB UB sM \
@@ -125,7 +124,6 @@ process starsolo_v3_1mm {
         --soloUMIposition 0_16_0_21 \
         --soloFeatures Gene GeneFull Velocyto \
         --soloUMIdedup 1MM_CR \
-        --soloUMIfiltering MultiGeneUMI_CR \
         --outSAMtype BAM SortedByCoordinate \
         --outSAMunmapped Within \
         --outSAMattributes NH HI AS nM CR CY UR UY CB UB sM \
@@ -181,7 +179,6 @@ process starsolo_v2 {
         --soloUMIposition 3_9_3_14 \
         --soloFeatures Gene GeneFull Velocyto \
         --soloUMIdedup 1MM_CR \
-        --soloUMIfiltering MultiGeneUMI_CR \
         --outSAMtype BAM SortedByCoordinate \
         --outSAMunmapped Within \
         --outSAMattributes NH HI AS nM CR CY UR UY CB UB sM \

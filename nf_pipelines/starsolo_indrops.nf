@@ -63,9 +63,10 @@ params.preprocess_only = false  // --preprocess_only to stop after trim+sync (pu
 params.kotov_runs      = 'both' // --kotov_runs both|runA|runB — which Kotov sequencing runs to process
 params.skip_briggs     = false  // --skip_briggs to skip Briggs preprocessing (use when Briggs was already processed)
 
-// Test mode: run starsolo + starsolo_1mm + dropest in parallel on a single library
+// Test mode: run starsolo EditDist_2 + 1MM in parallel on a single library (optionally also dropest)
 params.test           = false  // --test to enable test mode
 params.test_library   = 'S11_1_1'  // library to test on
+params.test_dropest   = false  // --test_dropest to also run dropest alongside starsolo in test mode
 params.merged_fastq_dir    = null  // --merged_fastq_dir to skip merge and use pre-merged FASTQs for dropest test
 params.processed_fastq_dir = null  // --processed_fastq_dir to skip preprocessing and load pre-processed FASTQs directly
 
@@ -376,12 +377,12 @@ workflow RUN_V3 {
             }
 
             if (params.test) {
-            // Test mode: run all three aligners on a single library
+            // Test mode: run STARsolo EditDist_2 and 1MM on a single library
             test_ch = starsolo_in.filter { lib_name, r1, r2, r4 ->
                 lib_name == params.test_library
             }
 
-            // 1) STARsolo EditDist_2 (current default)
+            // 1) STARsolo EditDist_2
             starsolo_v3(
                 test_ch,
                 params.genome_dir,
@@ -397,26 +398,27 @@ workflow RUN_V3 {
                 params.cb_whitelist2_rc
             )
 
-            // 3) dropEst
-            droptag_xml = params.droptag_v3_xml
-            gtf_file    = params.gtf
+            // 3) dropEst (optional, enabled with --test_dropest)
+            if (params.test_dropest) {
+                droptag_xml = params.droptag_v3_xml
+                gtf_file    = params.gtf
 
-            if (params.merged_fastq_dir) {
-                // Use pre-merged FASTQs — skip the merge step
-                premerged_ch = Channel.of(
-                    tuple(
-                        params.test_library,
-                        file("${params.merged_fastq_dir}/merged_R1.fastq.gz", checkIfExists: true),
-                        file("${params.merged_fastq_dir}/merged_R2.fastq.gz", checkIfExists: true),
-                        file("${params.merged_fastq_dir}/merged_R4.fastq.gz", checkIfExists: true)
+                if (params.merged_fastq_dir) {
+                    premerged_ch = Channel.of(
+                        tuple(
+                            params.test_library,
+                            file("${params.merged_fastq_dir}/merged_R1.fastq.gz", checkIfExists: true),
+                            file("${params.merged_fastq_dir}/merged_R2.fastq.gz", checkIfExists: true),
+                            file("${params.merged_fastq_dir}/merged_R4.fastq.gz", checkIfExists: true)
+                        )
                     )
-                )
-                tagged  = droptag_v3_premerged_test(premerged_ch, droptag_xml)
-            } else {
-                tagged  = droptag_v3_test(test_ch, droptag_xml)
+                    tagged  = droptag_v3_premerged_test(premerged_ch, droptag_xml)
+                } else {
+                    tagged  = droptag_v3_test(test_ch, droptag_xml)
+                }
+                aligned = star_plain_test(tagged, params.genome_dir)
+                dropest_test(aligned, gtf_file, droptag_xml)
             }
-            aligned = star_plain_test(tagged, params.genome_dir)
-            dropest_test(aligned, gtf_file, droptag_xml)
 
         } else if (params.aligner == 'starsolo') {
             starsolo_v3(
@@ -533,9 +535,9 @@ workflow {
     if (!params.preprocess_only && params.aligner != 'starsolo' && params.aligner != 'dropest') {
         error "Unknown --aligner '${params.aligner}'. Use: starsolo | dropest"
     }
-    if (!params.preprocess_only && (params.aligner == 'dropest' || params.test)) {
-        if (!params.dropest_container) error "Please specify --dropest_container when using --aligner dropest or --test"
-        if (!params.gtf) error "Please specify --gtf (GTF annotation) when using --aligner dropest or --test"
+    if (!params.preprocess_only && (params.aligner == 'dropest' || params.test_dropest)) {
+        if (!params.dropest_container) error "Please specify --dropest_container when using --aligner dropest or --test_dropest"
+        if (!params.gtf) error "Please specify --gtf (GTF annotation) when using --aligner dropest or --test_dropest"
     }
     if (!params.processed_fastq_dir && !params.adapter_fasta) {
         error "Please specify --adapter_fasta (e.g. illumina_nextseq_p7.fasta) for gene-read trimming"
