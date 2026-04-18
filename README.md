@@ -156,6 +156,7 @@ rm -rf nf_work
 | `--test` | `false` | Test mode: run all aligners on a single library |
 | `--test_library` | `S11_1_1` | Library to use in test mode |
 | `--samplesheet` | per-batch default | Override the bundled samplesheet CSV |
+| `--queue_size` | unlimited | Cap on concurrent executor jobs (SLURM or local) |
 | `--cb_whitelist1` | bundled | CB1 forward whitelist |
 | `--cb_whitelist1_rc` | bundled | CB1 reverse-complement whitelist (v2) |
 | `--cb_whitelist2_sense` | bundled | CB2 forward whitelist |
