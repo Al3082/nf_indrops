@@ -184,6 +184,7 @@ process starsolo_v2 {
         --outSAMattributes NH HI AS nM CR CY UR UY CB UB sM \
         --soloMultiMappers EM \
         --limitBAMsortRAM 30000000000 \
-        --outFileNamePrefix STAR/
+        --outFileNamePrefix STAR/ \
+        --soloOutFormatFeaturesGeneField3 gene_name
     """
 }
