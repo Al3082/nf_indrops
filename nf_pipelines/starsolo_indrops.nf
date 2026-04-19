@@ -371,7 +371,7 @@ workflow RUN_V3 {
 
         if (!params.preprocess_only) {
 
-            if (!params.skip_qc && !params.processed_fastq_dir) {
+            if (!params.skip_qc) {
                 fastqc(starsolo_in)
                 multiqc(fastqc.out.reports.collect())
             }
