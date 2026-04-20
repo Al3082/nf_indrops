@@ -447,6 +447,27 @@ workflow RUN_V2 {
 
     main:
 
+        if (params.processed_fastq_dir) {
+
+            // ── Skip preprocessing: load pre-processed FASTQs directly ───────
+            //    Expected naming in processed_fastq_dir/:
+            //      {lib}.trimmed_R1.fastq.gz   (trimmed gene read)
+            //      {lib}.synced.fastq.gz       (synced barcode read)
+
+            pdir = params.processed_fastq_dir
+            if (!file(pdir).isDirectory()) error "--processed_fastq_dir '${pdir}' does not exist or is not a directory"
+
+            gene_ch = Channel.fromPath("${pdir}/*.trimmed_R1.fastq.gz", checkIfExists: true)
+                .map { f -> tuple(f.name.replace('.trimmed_R1.fastq.gz', ''), f) }
+
+            bc_ch = Channel.fromPath("${pdir}/*.synced.fastq.gz", checkIfExists: true)
+                .map { f -> tuple(f.name.replace('.synced.fastq.gz', ''), f) }
+
+            briggs_v2 = bc_ch.join(gene_ch)
+                .map { lib, sr1, tr2 -> tuple(lib, sr1, tr2) }
+
+        } else {
+
         briggs_v2_raw = Channel.fromPath(samplesheet)
             .splitCsv(header: true)
             .map { row ->
@@ -487,6 +508,8 @@ workflow RUN_V2 {
                 .collect()
         )
 
+        } // end else (preprocessing path)
+
         // ── Alignment ────────────────────────────────────────────────────
 
         if (params.preprocess_only) {
@@ -522,9 +545,6 @@ workflow {
     }
     if (params.batch == 'v2' && params.kotov_runs != 'both') {
         log.warn "--kotov_runs is ignored for v2 batch (no Kotov data)"
-    }
-    if (params.batch == 'v2' && params.processed_fastq_dir) {
-        error "--processed_fastq_dir is not supported for v2 batch"
     }
     if (params.processed_fastq_dir && params.preprocess_only) {
         error "--processed_fastq_dir and --preprocess_only are mutually exclusive"
